@@ -1,0 +1,3564 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>SCRCPY Launcher</title>
+<style>
+  html, body {
+    margin: 0;
+    background: transparent;
+    -webkit-app-region: drag;
+  }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 8px;
+    width: 416px;
+    height: 940px;
+    overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  #window {
+    -webkit-app-region: drag;
+    position: relative;
+    width: 400px;
+    height: 600px;
+    padding: 20px;
+    background: rgba(32, 32, 32, 0.95);
+    backdrop-filter: blur(20px);
+    color: #fff;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    transition: border-color 0.3s ease;
+    box-sizing: border-box;
+    overflow: hidden;
+    max-width: 400px;
+    max-height: 600px;
+    min-width: 400px;
+    min-height: 600px;
+  }
+
+  #window:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+  
+  .window-controls {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+    z-index: 2;
+  }
+
+  .window-control {
+    cursor: pointer;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 16px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0;
+    line-height: 1;
+  }
+
+  .window-control:hover,
+  .window-control:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+  }
+
+  .window-control:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.35);
+    outline-offset: 2px;
+  }
+
+  #minimize {
+    font-size: 18px;
+    padding-bottom: 4px;
+  }
+  
+  button, input { 
+    -webkit-app-region: no-drag; 
+  }
+  
+  .top-btns { 
+    display: flex; 
+    gap: 10px; 
+    margin-top: 20px;
+    flex-shrink: 0;
+  }
+  
+  .top-btns button { 
+    flex: 1; 
+    padding: 8px 12px; 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    border-radius: 6px; 
+    background: rgba(255, 255, 255, 0.1); 
+    color: #fff; 
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  
+  .top-btns button:hover { 
+    background: rgba(255, 255, 255, 0.2); 
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+  }
+
+  .top-btns button:active {
+    transform: scale(0.98);
+  }
+
+  #connectBtn {
+    background: #0078d4;
+    border-color: #106ebe;
+  }
+
+  #connectBtn:hover {
+    background: #106ebe;
+  }
+
+  #audioBtn.active {
+    background: rgba(0, 150, 90, 0.7);
+    border-color: rgba(0, 200, 140, 0.8);
+  }
+
+  #audioBtn.active:hover {
+    background: rgba(0, 200, 140, 0.8);
+  }
+
+  #audioBtn.closing {
+    opacity: 0.7;
+    cursor: wait;
+  }
+
+  #status {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.8;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 16px;
+    flex-shrink: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+    white-space: pre-line;
+  }
+
+  .wifi-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .wifi-inputs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .wifi-section input {
+    flex: 1;
+    padding: 4px 6px;
+    font-size: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .wifi-section button {
+    padding: 6px 8px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .wifi-section button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .alert-banner {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    padding: 10px 14px;
+    background: rgba(26, 26, 26, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+    white-space: pre-line;
+    backdrop-filter: blur(18px);
+    z-index: 3;
+  }
+
+  .alert-banner.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .scrcpy-update-notice-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(12px);
+    z-index: 1100;
+    -webkit-app-region: no-drag;
+  }
+
+  .scrcpy-update-notice-backdrop.show {
+    display: flex;
+  }
+
+  .scrcpy-update-notice {
+    width: 360px;
+    max-width: 90vw;
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(26, 26, 26, 0.95);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    pointer-events: auto;
+    -webkit-app-region: no-drag;
+  }
+
+  .scrcpy-update-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .scrcpy-update-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    text-align: center;
+  }
+
+  .scrcpy-update-button {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 120, 212, 0.5);
+    background: linear-gradient(135deg, rgba(0, 120, 212, 0.85), rgba(16, 110, 190, 0.9));
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .scrcpy-update-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+    box-shadow: none;
+  }
+
+  .scrcpy-update-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  .scrcpy-update-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+  .scrcpy-update-version {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.75);
+    text-align: center;
+  }
+
+  .scrcpy-update-changelog {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    line-height: 1.5;
+    white-space: normal;
+  }
+
+  .scrcpy-update-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  #scrcpyUpdateChangelog::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  #scrcpyUpdateChangelog::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+  }
+
+  #scrcpyUpdateChangelog::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+  }
+
+  .scrcpy-download-backdrop,
+  .scrcpy-update-progress-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(12px);
+    z-index: 1200;
+    -webkit-app-region: no-drag;
+  }
+
+  .scrcpy-download-backdrop.show,
+  .scrcpy-update-progress-backdrop.show {
+    display: flex;
+  }
+
+  .scrcpy-download-card {
+    width: 320px;
+    max-width: 90vw;
+    background: rgba(26, 26, 26, 0.95);
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .scrcpy-download-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .scrcpy-download-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .scrcpy-download-spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.25);
+    border-top-color: rgba(255, 255, 255, 0.95);
+    animation: spin 0.75s linear infinite;
+  }
+
+  .scrcpy-download-message {
+    font-size: 14px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.78);
+    min-height: 20px;
+    white-space: pre-line;
+  }
+
+  .scrcpy-download-close {
+    display: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .scrcpy-download-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .scrcpy-download-close:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+  .scrcpy-update-progress-card {
+    width: 360px;
+    max-width: 92vw;
+    background: rgba(24, 24, 24, 0.95);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.5);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    align-items: center;
+  }
+
+  .scrcpy-update-progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+
+  .scrcpy-update-progress-title {
+    font-size: 28px;
+    font-weight: 600;
+    text-transform: lowercase;
+    color: #fff;
+    text-align: center;
+  }
+
+  .scrcpy-update-progress-spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.25);
+    border-top-color: rgba(255, 255, 255, 0.95);
+    animation: spin 0.75s linear infinite;
+  }
+
+  .scrcpy-update-progress-message {
+    min-height: 22px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.82);
+    text-align: center;
+    white-space: pre-line;
+  }
+
+  .scrcpy-update-support {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 14px;
+    width: 100%;
+  }
+
+  .scrcpy-update-support-text {
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .scrcpy-update-donations {
+    display: flex;
+    justify-content: center;
+  }
+
+  .paypal-button {
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+
+  .paypal-button img {
+    display: block;
+    max-width: 180px;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .paypal-button:hover img {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  }
+
+  .paypal-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 4px;
+  }
+
+  .scrcpy-update-close-button {
+    display: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .scrcpy-update-close-button.visible {
+    display: inline-flex;
+  }
+
+  .scrcpy-update-close-button:hover {
+    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
+  }
+
+  .scrcpy-update-close-button:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+  #search {
+    width: 100%;
+    padding: 8px 12px 8px 35px;
+    border-radius: 6px; 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    background: rgba(255, 255, 255, 0.1); 
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s ease;
+    position: relative;
+    box-sizing: border-box;
+    flex-shrink: 0;
+  }
+
+  #search::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  #search:focus {
+    border-color: #0078d4;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+  }
+
+  .search-container {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  
+  #lists { 
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    overflow-y: auto;
+    margin: 0;
+    min-height: 0;
+  }
+  
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin: 8px 0 8px 0;
+    padding: 8px 5px;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-app-region: no-drag;
+    transition: color 0.2s ease;
+  }
+
+  .section-header:hover {
+    color: rgba(255, 255, 255, 1);
+  }
+
+  button.section-header {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font: inherit;
+    width: 100%;
+    text-align: left;
+    padding: 8px 5px;
+  }
+
+  button.section-header:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .section-header.collapsible {
+    cursor: pointer;
+  }
+
+  .section-header.collapsible:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: 2px;
+  }
+
+  .section-header-icon {
+    font-size: 12px;
+    opacity: 0.7;
+    transition: transform 0.2s ease;
+  }
+
+  .section-header.collapsible.is-collapsed .section-header-icon {
+    transform: rotate(-90deg);
+  }
+
+  .section-header:first-child {
+    margin-top: 0;
+  }
+  
+  ul { 
+    list-style: none; 
+    padding: 0; 
+    margin: 0 0 15px 0;
+  }
+
+  ul:last-child {
+    margin-bottom: 0;
+  }
+  
+  .app-item {
+    border-radius: 6px;
+    display: flex;
+    align-items: stretch;
+    transition: background 0.2s ease;
+    -webkit-app-region: drag;
+  }
+
+  .app-item-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: inherit;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .app-item:hover .app-item-content,
+  .app-item-content:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .app-item-content::before {
+    content: '📱';
+    font-size: 16px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .app-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .loading-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: rgba(255, 255, 255, 0.9);
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  #invertBtn { 
+    padding: 4px 8px; 
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  #invertBtn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  #invertBtn:active {
+    transform: scale(0.95);
+  }
+
+  .bottom-section {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .settings-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: white;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+  }
+
+  .settings-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .context-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    background: transparent;
+    z-index: 999;
+    -webkit-app-region: no-drag;
+  }
+
+  .context-menu {
+    position: fixed;
+    background: rgba(32, 32, 32, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 4px 0;
+    display: none;
+    flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    min-width: 220px;
+    -webkit-app-region: no-drag;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .context-menu div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.9);
+    -webkit-app-region: no-drag;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+
+  .context-menu div:hover,
+  .context-menu div:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+    outline: none;
+  }
+
+  /* Modal de atajos de teclado */
+  .shortcuts-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .shortcuts-modal.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .shortcuts-modal-content {
+    background: rgba(32, 32, 32, 0.95);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    padding: 0;
+    width: 90vw;
+    max-width: 800px;
+    height: 90vh;
+    max-height: 700px;
+    color: white;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    -webkit-app-region: no-drag;
+  }
+
+  .shortcuts-modal.show .shortcuts-modal-content {
+    transform: scale(1);
+  }
+
+  .retry-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1002;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .retry-modal.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .device-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1003;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .device-modal.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .device-modal .modal-content {
+    width: 320px;
+  }
+
+  .device-modal-message {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .device-option {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    transition: all 0.2s ease;
+    -webkit-app-region: no-drag;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    line-height: 1.4;
+  }
+
+  .device-option:hover,
+  .device-option:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.3);
+    outline: none;
+  }
+
+  .device-option-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .device-id {
+    font-family: 'Consolas', 'Fira Code', 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    word-break: break-all;
+  }
+
+  .device-state-tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .device-state-device {
+    border-color: rgba(0, 200, 83, 0.4);
+    background: rgba(0, 200, 83, 0.2);
+    color: #a3ffcc;
+  }
+
+  .device-state-unauthorized {
+    border-color: rgba(255, 152, 0, 0.45);
+    background: rgba(255, 152, 0, 0.2);
+    color: #ffddb0;
+  }
+
+  .device-state-offline {
+    border-color: rgba(244, 67, 54, 0.5);
+    background: rgba(244, 67, 54, 0.22);
+    color: #ffb6b0;
+  }
+
+  .device-state-authorizing {
+    border-color: rgba(33, 150, 243, 0.45);
+    background: rgba(33, 150, 243, 0.2);
+    color: #b8e0ff;
+  }
+
+  .device-state-unknown {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .device-details {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .device-state-message {
+    font-size: 12px;
+    color: rgba(255, 204, 128, 0.95);
+  }
+
+  .device-empty {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+  }
+
+  .retry-content {
+    background: rgba(32, 32, 32, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    color: white;
+    width: 360px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    -webkit-app-region: no-drag;
+  }
+
+  .retry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .retry-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .retry-message {
+    margin: 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .retry-content button {
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-self: flex-start;
+  }
+
+  .retry-content button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .retry-wifi-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 4px;
+  }
+
+  .shortcuts-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
+  }
+
+  .shortcuts-content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .shortcuts-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  .shortcuts-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+
+  .shortcuts-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  .shortcuts-note {
+    background: rgba(0, 120, 212, 0.2);
+    border: 1px solid rgba(0, 120, 212, 0.4);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .shortcuts-section {
+    margin-bottom: 25px;
+  }
+
+  .shortcuts-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0078d4;
+    margin: 0 0 15px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 15px;
+  }
+
+  .shortcut-item:last-child {
+    border-bottom: none;
+  }
+
+  .shortcut-keys {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffd700;
+    white-space: nowrap;
+    min-width: 120px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .shortcut-desc {
+    flex: 1;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.4;
+  }
+
+  /* Modal de configuración de app */
+  .app-config-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .app-config-modal.show {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .modal-content {
+    background: rgba(32, 32, 32, 0.95);
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    padding: 20px;
+    width: 350px;
+    color: white;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .app-config-modal.show .modal-content {
+    transform: scale(1);
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 18px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .modal-close:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+  .modal-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .orientation-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .orientation-btn {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .orientation-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .orientation-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .advanced-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 20px;
+    margin-top: 20px;
+  }
+
+  .advanced-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .resolution-inputs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .input-group {
+    flex: 1;
+  }
+
+  .input-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 5px;
+    display: block;
+  }
+
+  .resolution-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+  }
+
+  .resolution-input:focus {
+    border-color: #0078d4;
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .resolution-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .execute-btn {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #106ebe;
+    border-radius: 8px;
+    background: #0078d4;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    transition: all 0.2s ease;
+  }
+
+  .execute-btn:hover {
+    background: #106ebe;
+  }
+
+  .execute-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .save-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .checkbox-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+
+  .checkbox-option label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+  }
+
+  /* Scrollbar personalizado estilo Windows 11 */
+  #lists::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  #lists::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    margin: 2px;
+  }
+
+  #lists::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    border: 2px solid rgba(32, 32, 32, 0.95);
+    background-clip: content-box;
+  }
+
+  #lists::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+    background-clip: content-box;
+  }
+
+  #lists::-webkit-scrollbar-thumb:active {
+    background: rgba(255, 255, 255, 0.4);
+    background-clip: content-box;
+  }
+
+  /* Firefox scrollbar */
+  #lists {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+  }
+
+  /* Animaciones */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  #window {
+    animation: fadeIn 0.3s ease-out;
+  }
+</style>
+</head>
+<body>
+<div id="window">
+  <div class="window-controls">
+    <button type="button" id="minimize" class="window-control" aria-label="Minimizar ventana">–</button>
+    <button type="button" id="close" class="window-control" aria-label="Cerrar ventana">✖</button>
+  </div>
+  <div id="alertBanner" class="alert-banner" role="alert" aria-live="assertive"></div>
+  <div class="top-btns">
+    <button id="connectBtn">🔌 Conectar</button>
+    <button id="mirrorBtn">🪞 Mirror</button>
+    <button id="audioBtn">🔊 Audio</button>
+  </div>
+  <div id="status">Listo para conectar</div>
+  <div class="search-container">
+    <div class="search-icon">🔍</div>
+    <input id="search" placeholder="Buscar aplicaciones..." />
+  </div>
+  <div id="lists">
+    <div id="frequentSection">
+      <button type="button" class="section-header collapsible" id="frequentHeader" aria-expanded="true" aria-controls="frequentList">
+        <span>📊 Más usadas</span>
+        <span class="section-header-icon" aria-hidden="true">▾</span>
+      </button>
+      <ul id="frequentList"></ul>
+    </div>
+    <div class="section-header">📱 Todas las apps <button id="invertBtn">⇅</button></div>
+    <ul id="allList"></ul>
+  </div>
+  <div class="bottom-section">
+    <button class="settings-btn" id="settingsBtn">⚙️ Configuración</button>
+    <button class="settings-btn" id="shortcutsBtn">⌨️ Atajos</button>
+  </div>
+</div>
+
+<div id="scrcpyUpdateModal" class="scrcpy-update-notice-backdrop" role="dialog" aria-modal="true" aria-live="polite" aria-labelledby="scrcpyUpdateTitle" aria-describedby="scrcpyUpdateVersion scrcpyUpdateChangelog" aria-hidden="true">
+  <div id="scrcpyUpdateNotice" class="scrcpy-update-notice">
+    <div class="scrcpy-update-header">
+      <div id="scrcpyUpdateTitle" class="scrcpy-update-title">Nueva versión de SCRCPY disponible</div>
+    </div>
+    <div id="scrcpyUpdateVersion" class="scrcpy-update-version"></div>
+    <div id="scrcpyUpdateChangelog" class="scrcpy-update-changelog"></div>
+    <div class="scrcpy-update-actions">
+      <button type="button" id="scrcpyUpdateButton" class="scrcpy-update-button">Actualizar</button>
+    </div>
+  </div>
+</div>
+
+<div id="scrcpyDownloadModal" class="scrcpy-download-backdrop" role="dialog" aria-modal="true" aria-live="assertive">
+  <div class="scrcpy-download-card">
+    <div class="scrcpy-download-header">
+      <div id="scrcpyDownloadTitle" class="scrcpy-download-title">Descargando</div>
+      <div id="scrcpyDownloadSpinner" class="scrcpy-download-spinner" aria-hidden="true"></div>
+    </div>
+    <div id="scrcpyDownloadMessage" class="scrcpy-download-message"></div>
+    <button type="button" id="scrcpyDownloadClose" class="scrcpy-download-close">Cerrar</button>
+  </div>
+</div>
+
+<div id="scrcpyUpdateProgressModal" class="scrcpy-update-progress-backdrop" role="dialog" aria-modal="true" aria-live="assertive">
+  <div class="scrcpy-update-progress-card">
+    <div class="scrcpy-update-progress-header">
+      <div id="scrcpyUpdateProgressTitle" class="scrcpy-update-progress-title">actualizando</div>
+      <div id="scrcpyUpdateProgressSpinner" class="scrcpy-update-progress-spinner" aria-hidden="true"></div>
+    </div>
+    <div id="scrcpyUpdateProgressMessage" class="scrcpy-update-progress-message"></div>
+    <div class="scrcpy-update-support">
+      <p class="scrcpy-update-support-text">Te gusta Scrcpy launcher?
+        <br>Por favor, apoya mi trabajo open source.</p>
+      <div class="scrcpy-update-donations">
+        <button type="button" class="paypal-button" data-open-external="https://www.paypal.com/paypalme/marcealban1">
+          <img src="./Resources/Paypal_button.png" alt="Apoyar en PayPal" loading="lazy">
+        </button>
+      </div>
+      <p class="scrcpy-update-support-text">Por favor también dale amor al creador de la base sobre la que funciona esta interfaz gráfica.</p>
+      <div class="scrcpy-update-donations">
+        <button type="button" class="paypal-button" data-open-external="https://www.paypal.com/paypalme/rom2v">
+          <img src="./Resources/Paypal_button.png" alt="Apoyar en PayPal" loading="lazy">
+        </button>
+      </div>
+    </div>
+    <button type="button" id="scrcpyUpdateProgressClose" class="scrcpy-update-close-button">Cerrar</button>
+  </div>
+</div>
+
+<div id="contextMenuBackdrop" class="context-menu-backdrop"></div>
+
+<div id="contextMenu" class="context-menu">
+  <div data-action="vertical">▯ Iniciar vertical</div>
+  <div data-action="horizontal">▭ Iniciar horizontal</div>
+  <div data-action="edit">✏️ Editar preferencias</div>
+  <div data-action="reset">♻️ Resetear preferencias</div>
+</div>
+
+<div id="retryModal" class="retry-modal">
+  <div class="retry-content">
+    <div class="retry-header">
+      <span class="retry-title">No se detectó ningún dispositivo</span>
+      <button class="modal-close" id="retryModalClose" aria-label="Cerrar" type="button">✖</button>
+    </div>
+    <p class="retry-message">Comprueba la conexión USB o utiliza la opción de conexión por Wi-Fi.</p>
+    <button id="retryBtn">Reintentar</button>
+    <div class="wifi-section">
+      <div class="retry-wifi-title">Conectar por Wi-Fi</div>
+      <div class="wifi-inputs">
+        <input id="ipInput" placeholder="IP" />
+        <input id="portInput" placeholder="Puerto" />
+      </div>
+      <button id="wifiBtn">Conectar por wifi</button>
+    </div>
+  </div>
+</div>
+
+<div id="deviceModal" class="device-modal" aria-hidden="true">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span>Selecciona un dispositivo</span>
+      <button class="modal-close" id="deviceModalClose" aria-label="Cerrar" type="button">✖</button>
+    </div>
+    <p class="device-modal-message">Elige un dispositivo para que los comandos se ejecuten sobre él.</p>
+    <div class="device-list" id="deviceList"></div>
+  </div>
+</div>
+
+<!-- Modal de configuración de app -->
+<div class="app-config-modal" id="appConfigModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span id="appConfigTitle">Configurar App</span>
+      <div class="modal-close" id="modalClose">✖</div>
+    </div>
+    
+    <div class="orientation-buttons">
+      <button class="orientation-btn" id="horizontalBtn">
+        ▭ Horizontal
+      </button>
+      <button class="orientation-btn" id="verticalBtn">
+        ▯ Vertical
+      </button>
+    </div>
+
+    <div class="advanced-section">
+      <div class="advanced-title">⚙️ Avanzado</div>
+      
+      <div class="resolution-inputs">
+        <div class="input-group">
+          <label class="input-label">Ancho (px)</label>
+          <input type="number" class="resolution-input" id="widthInput" placeholder="1920">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Alto (px)</label>
+          <input type="number" class="resolution-input" id="heightInput" placeholder="1080">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Densidad</label>
+          <input type="number" class="resolution-input" id="densityInput" placeholder="200">
+        </div>
+      </div>
+
+      <button class="execute-btn" id="executeBtn" style="display: none;">
+        🚀 Ejecutar Aplicación
+      </button>
+
+      <div class="save-options">
+        <div class="checkbox-option">
+          <input type="checkbox" id="saveForThisApp">
+          <label for="saveForThisApp">Guardar configuración para esta app</label>
+        </div>
+        <div class="checkbox-option">
+          <input type="checkbox" id="saveForAllApps">
+          <label for="saveForAllApps">Guardar para todas las apps</label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de atajos de teclado -->
+<div class="shortcuts-modal" id="shortcutsModal">
+  <div class="shortcuts-modal-content">
+    <div class="modal-header">
+      <span>⌨️ Atajos de Teclado SCRCPY</span>
+      <div class="modal-close" id="shortcutsModalClose">✖</div>
+    </div>
+    
+    <div class="shortcuts-content">
+      <div class="shortcuts-note">
+        <strong>Nota:</strong> "Alt Izq" es la tecla modificadora principal para todos los atajos
+      </div>
+      
+      <div class="shortcuts-section">
+        <h3>🖥️ Pantalla y Ventana</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + M</span>
+          <span class="shortcut-desc">Botón MENÚ (desbloquear pantalla)</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <h3>🔊 Volumen y Energía</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + ↑</span>
+          <span class="shortcut-desc">Subir volumen</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + ↓</span>
+          <span class="shortcut-desc">Bajar volumen</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + P</span>
+          <span class="shortcut-desc">Botón de encendido</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + O</span>
+          <span class="shortcut-desc">Apagar pantalla del dispositivo</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + Shift + O</span>
+          <span class="shortcut-desc">Encender pantalla del dispositivo</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <h3>🔔 Notificaciones y Paneles</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + N</span>
+          <span class="shortcut-desc">Expandir panel de notificaciones</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + N + N</span>
+          <span class="shortcut-desc">Expandir panel de configuración</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + Shift + N</span>
+          <span class="shortcut-desc">Cerrar paneles</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <h3>📋 Portapapeles y Texto</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + C</span>
+          <span class="shortcut-desc">Copiar al portapapeles</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + X</span>
+          <span class="shortcut-desc">Cortar al portapapeles</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + V</span>
+          <span class="shortcut-desc">Sincronizar portapapeles y pegar</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + Shift + V</span>
+          <span class="shortcut-desc">Inyectar texto del portapapeles</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <h3>🎮 Controles Avanzados</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + Z</span>
+          <span class="shortcut-desc">Pausar/reanudar pantalla</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + Shift + Z</span>
+          <span class="shortcut-desc">Reanudar pantalla</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + Shift + R</span>
+          <span class="shortcut-desc">Reiniciar captura de vídeo</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Alt Izq + I</span>
+          <span class="shortcut-desc">Mostrar/ocultar contador FPS</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <h3>🖱️ Gestos con Ratón</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Ctrl + clic y arrastrar</span>
+          <span class="shortcut-desc">Pellizcar para zoom/rotar</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Shift + clic y arrastrar</span>
+          <span class="shortcut-desc">Inclinar verticalmente</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Ctrl + Shift + clic y arrastrar</span>
+          <span class="shortcut-desc">Inclinar horizontalmente</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <h3>📁 Archivos</h3>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Arrastrar archivo APK</span>
+          <span class="shortcut-desc">Instalar APK en el dispositivo</span>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-keys">Arrastrar otro archivo</span>
+          <span class="shortcut-desc">Enviar archivo al dispositivo</span>
+        </div>
+      </div>
+
+      <div class="shortcuts-note">
+        <strong>Nota:</strong> Todos los atajos Ctrl+tecla se envían directamente al dispositivo y son manejados por la aplicación activa.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const closeBtn = document.getElementById('close');
+  const minimizeBtn = document.getElementById('minimize');
+  const mirrorBtn = document.getElementById('mirrorBtn');
+  const audioBtn = document.getElementById('audioBtn');
+  const connectBtn = document.getElementById('connectBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const status = document.getElementById('status');
+  const search = document.getElementById('search');
+  const frequentSection = document.getElementById('frequentSection');
+  const frequentHeader = document.getElementById('frequentHeader');
+  const frequentList = document.getElementById('frequentList');
+  const allList = document.getElementById('allList');
+  const invertBtn = document.getElementById('invertBtn');
+  const wifiBtn = document.getElementById('wifiBtn');
+  const ipInput = document.getElementById('ipInput');
+  const portInput = document.getElementById('portInput');
+  const alertBanner = document.getElementById('alertBanner');
+  const contextMenu = document.getElementById('contextMenu');
+  const contextMenuBackdrop = document.getElementById('contextMenuBackdrop');
+  const retryModal = document.getElementById('retryModal');
+  const retryBtn = document.getElementById('retryBtn');
+  const retryModalClose = document.getElementById('retryModalClose');
+  const deviceModal = document.getElementById('deviceModal');
+  const deviceModalClose = document.getElementById('deviceModalClose');
+  const deviceList = document.getElementById('deviceList');
+  const scrcpyUpdateModal = document.getElementById('scrcpyUpdateModal');
+  const scrcpyUpdateButton = document.getElementById('scrcpyUpdateButton');
+  const scrcpyUpdateVersion = document.getElementById('scrcpyUpdateVersion');
+  const scrcpyUpdateChangelog = document.getElementById('scrcpyUpdateChangelog');
+  const scrcpyDownloadModal = document.getElementById('scrcpyDownloadModal');
+  const scrcpyDownloadTitle = document.getElementById('scrcpyDownloadTitle');
+  const scrcpyDownloadSpinner = document.getElementById('scrcpyDownloadSpinner');
+  const scrcpyDownloadMessage = document.getElementById('scrcpyDownloadMessage');
+  const scrcpyDownloadClose = document.getElementById('scrcpyDownloadClose');
+  const scrcpyUpdateProgressModal = document.getElementById('scrcpyUpdateProgressModal');
+  const scrcpyUpdateProgressTitle = document.getElementById('scrcpyUpdateProgressTitle');
+  const scrcpyUpdateProgressSpinner = document.getElementById('scrcpyUpdateProgressSpinner');
+  const scrcpyUpdateProgressMessage = document.getElementById('scrcpyUpdateProgressMessage');
+  const scrcpyUpdateProgressClose = document.getElementById('scrcpyUpdateProgressClose');
+  const externalLinkButtons = document.querySelectorAll('[data-open-external]');
+
+  const SCRCPY_CONTEXT_INITIAL = 'initial';
+  const SCRCPY_CONTEXT_UPDATE = 'update';
+
+  let pendingUpdateInfo = null;
+  let updateRequestInFlight = false;
+  let initialDownloadCompleted = false;
+  let updateFlowCompleted = false;
+
+  const DEVICE_STATE_LABELS = {
+    device: 'Disponible',
+    unauthorized: 'No autorizado',
+    offline: 'Offline',
+    authorizing: 'Autorizando'
+  };
+
+  const UNAUTHORIZED_ERROR_MESSAGE =
+    'Por favor verifique que la depuración USB se encuentre activada y que se haya autorizado la depuración desde este PC. En algunos dispositivos también podría requerir activar la opción depuración USB, (ajustes de seguridad).';
+  const OFFLINE_USB_MESSAGE = 'Dispositivo offline, por favor reconecte el cable USB.';
+  const OFFLINE_GENERIC_MESSAGE = 'El dispositivo se muestra como offline';
+
+  const DEVICE_STATE_MESSAGES = {
+    unauthorized: UNAUTHORIZED_ERROR_MESSAGE,
+    authorizing:
+      'Autoriza la depuración USB en el dispositivo para completar la conexión.'
+  };
+
+  let alertBannerTimeoutId;
+  let lastFocusedWifiField = null;
+
+  [ipInput, portInput].forEach((input) => {
+    if (!input) return;
+    input.addEventListener('focus', () => {
+      lastFocusedWifiField = input;
+    });
+  });
+
+  function getErrorMessage(error) {
+    if (!error) return '';
+    if (typeof error === 'string') return error;
+    if (typeof error.message === 'string') return error.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+
+  function hideInlineAlert() {
+    if (!alertBanner) return;
+    alertBanner.classList.remove('visible');
+    if (alertBannerTimeoutId) {
+      clearTimeout(alertBannerTimeoutId);
+      alertBannerTimeoutId = null;
+    }
+  }
+
+  function showInlineAlert(message, options = {}) {
+    if (!alertBanner) return;
+    hideInlineAlert();
+    alertBanner.textContent = message;
+    alertBanner.classList.add('visible');
+
+    const duration =
+      typeof options.duration === 'number' && options.duration >= 0
+        ? options.duration
+        : 5000;
+
+    if (duration > 0) {
+      alertBannerTimeoutId = window.setTimeout(() => {
+        alertBanner.classList.remove('visible');
+        alertBannerTimeoutId = null;
+      }, duration);
+    }
+  }
+
+  function restoreInputFocus(explicitTarget) {
+    const target = explicitTarget || lastFocusedWifiField || ipInput || portInput;
+    if (!target) return;
+
+    lastFocusedWifiField = target;
+    window.focus();
+    window.requestAnimationFrame(() => {
+      if (typeof target.focus === 'function') {
+        try {
+          target.focus({ preventScroll: true });
+        } catch {
+          target.focus();
+        }
+        if (typeof target.setSelectionRange === 'function') {
+          const valueLength = typeof target.value === 'string' ? target.value.length : 0;
+          target.setSelectionRange(valueLength, valueLength);
+        }
+      }
+    });
+  }
+
+  function showStatusAndAlert(message, options = {}) {
+    const text = typeof message === 'string' ? message.trim() : '';
+    if (!text) return;
+    status.textContent = text;
+    if (options.alert === false) return;
+    showInlineAlert(text, options);
+
+    const shouldRestoreFocus =
+      typeof options.restoreFocus === 'boolean'
+        ? options.restoreFocus
+        : Boolean(options.focusTarget);
+
+    if (shouldRestoreFocus) {
+      restoreInputFocus(options.focusTarget);
+    }
+  }
+
+  function escapeHtml(value) {
+    if (value === undefined || value === null) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function formatMultilineText(value) {
+    const safe = escapeHtml(value || '');
+    if (!safe) return '';
+    return safe.replace(/\r?\n/g, '<br>');
+  }
+
+  function formatBytes(bytes) {
+    if (!Number.isFinite(bytes) || bytes <= 0) return null;
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let index = 0;
+    while (size >= 1024 && index < units.length - 1) {
+      size /= 1024;
+      index += 1;
+    }
+    const precision = index === 0 || size >= 100 ? 0 : size >= 10 ? 1 : 2;
+    return `${size.toFixed(precision)} ${units[index]}`;
+  }
+
+  function openExternalLink(url) {
+    const normalized = typeof url === 'string' ? url.trim() : '';
+    if (!normalized) return;
+    if (typeof launcher !== 'undefined' && typeof launcher.openExternal === 'function') {
+      launcher.openExternal(normalized);
+    } else {
+      window.open(normalized, '_blank', 'noopener');
+    }
+  }
+
+  function showDownloadModal() {
+    if (scrcpyDownloadModal) scrcpyDownloadModal.classList.add('show');
+  }
+
+  function hideDownloadModal() {
+    if (scrcpyDownloadModal) scrcpyDownloadModal.classList.remove('show');
+  }
+
+  function setDownloadTitle(text) {
+    if (scrcpyDownloadTitle) scrcpyDownloadTitle.textContent = text || '';
+  }
+
+  function setDownloadSpinnerVisible(visible) {
+    if (scrcpyDownloadSpinner) {
+      scrcpyDownloadSpinner.style.display = visible ? 'inline-flex' : 'none';
+    }
+  }
+
+  function setDownloadMessage(text) {
+    if (scrcpyDownloadMessage) {
+      scrcpyDownloadMessage.textContent = text || '';
+    }
+  }
+
+  function setDownloadCloseVisible(visible) {
+    if (!scrcpyDownloadClose) return;
+    scrcpyDownloadClose.style.display = visible ? 'inline-flex' : 'none';
+  }
+
+  if (scrcpyDownloadClose) {
+    scrcpyDownloadClose.addEventListener('click', () => {
+      hideDownloadModal();
+      try {
+        scrcpyDownloadClose.blur();
+      } catch {
+        /* noop */
+      }
+    });
+  }
+
+  function handleInitialDownloadStarted() {
+    initialDownloadCompleted = false;
+    showDownloadModal();
+    setDownloadTitle('Descargando');
+    setDownloadSpinnerVisible(true);
+    setDownloadMessage('');
+    setDownloadCloseVisible(false);
+  }
+
+  function handleInitialDownloadStage(stage) {
+    if (initialDownloadCompleted) return;
+    const normalized = typeof stage === 'string' ? stage.toLowerCase() : '';
+    if (normalized === 'extracting') {
+      setDownloadMessage('Descomprimiendo archivos...');
+    } else if (normalized === 'installing') {
+      setDownloadMessage('Instalando archivos de scrcpy...');
+    }
+  }
+
+  function handleInitialDownloadProgress(progress) {
+    if (!progress || progress.context !== SCRCPY_CONTEXT_INITIAL || initialDownloadCompleted) return;
+    const percentValue = Number(progress.percent);
+    const percentText = Number.isFinite(percentValue)
+      ? `${Math.max(0, Math.min(100, Math.round(percentValue)))}%`
+      : null;
+    const receivedText = formatBytes(Number(progress.received));
+    const totalText = formatBytes(Number(progress.total));
+    let message = 'Descargando';
+    if (percentText) {
+      message += ` ${percentText}`;
+    }
+    if (receivedText && totalText) {
+      message += ` (${receivedText} / ${totalText})`;
+    } else if (receivedText) {
+      message += ` (${receivedText})`;
+    }
+    setDownloadMessage(message);
+  }
+
+  function handleInitialDownloadComplete(payload) {
+    initialDownloadCompleted = true;
+    showDownloadModal();
+    setDownloadTitle('¡Descarga finalizada!');
+    setDownloadSpinnerVisible(false);
+    const message = payload && payload.releaseName
+      ? `Se instaló ${payload.releaseName}.`
+      : 'Los archivos de scrcpy están listos.';
+    setDownloadMessage(message);
+    setDownloadCloseVisible(true);
+    if (scrcpyDownloadClose) {
+      window.setTimeout(() => {
+        try {
+          scrcpyDownloadClose.focus();
+        } catch {
+          // ignore
+        }
+      }, 100);
+    }
+  }
+
+  function handleInitialDownloadError(payload) {
+    initialDownloadCompleted = true;
+    showDownloadModal();
+    setDownloadTitle('Ocurrió un problema');
+    setDownloadSpinnerVisible(false);
+    setDownloadMessage((payload && payload.message) || 'No se pudo completar la descarga.');
+    setDownloadCloseVisible(true);
+  }
+
+  function showUpdateProgressModal() {
+    if (scrcpyUpdateProgressModal) scrcpyUpdateProgressModal.classList.add('show');
+  }
+
+  function hideUpdateProgressModal() {
+    if (scrcpyUpdateProgressModal) scrcpyUpdateProgressModal.classList.remove('show');
+  }
+
+  function setUpdateProgressTitle(text) {
+    if (scrcpyUpdateProgressTitle) scrcpyUpdateProgressTitle.textContent = text || '';
+  }
+
+  function setUpdateProgressMessage(text) {
+    if (scrcpyUpdateProgressMessage) {
+      scrcpyUpdateProgressMessage.textContent = text || '';
+    }
+  }
+
+  function showUpdateProgressSpinner(visible) {
+    if (scrcpyUpdateProgressSpinner) {
+      scrcpyUpdateProgressSpinner.style.display = visible ? 'inline-flex' : 'none';
+    }
+  }
+
+  function setUpdateCloseVisible(visible) {
+    if (!scrcpyUpdateProgressClose) return;
+    if (visible) {
+      scrcpyUpdateProgressClose.classList.add('visible');
+      scrcpyUpdateProgressClose.removeAttribute('tabindex');
+    } else {
+      scrcpyUpdateProgressClose.classList.remove('visible');
+      scrcpyUpdateProgressClose.setAttribute('tabindex', '-1');
+    }
+  }
+
+  function showUpdateNotice() {
+    if (scrcpyUpdateModal) {
+      scrcpyUpdateModal.classList.add('show');
+      scrcpyUpdateModal.setAttribute('aria-hidden', 'false');
+    }
+    if (scrcpyUpdateButton && !updateRequestInFlight) {
+      scrcpyUpdateButton.disabled = false;
+      window.setTimeout(() => {
+        try {
+          scrcpyUpdateButton.focus();
+        } catch {
+          /* ignore */
+        }
+      }, 50);
+    }
+  }
+
+  function hideUpdateNotice() {
+    if (scrcpyUpdateModal) {
+      scrcpyUpdateModal.classList.remove('show');
+      scrcpyUpdateModal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  if (scrcpyUpdateProgressClose) {
+    scrcpyUpdateProgressClose.addEventListener('click', () => {
+      hideUpdateProgressModal();
+      try {
+        scrcpyUpdateProgressClose.blur();
+      } catch {
+        /* noop */
+      }
+      if (pendingUpdateInfo && !updateFlowCompleted) {
+        showUpdateNotice();
+      }
+    });
+  }
+
+  if (externalLinkButtons && externalLinkButtons.length) {
+    Array.from(externalLinkButtons).forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        const url = button.getAttribute('data-open-external') || '';
+        openExternalLink(url);
+      });
+    });
+  }
+
+  function handleUpdateAvailable(payload) {
+    pendingUpdateInfo = payload || null;
+    showUpdateNotice();
+    if (scrcpyUpdateVersion) {
+      const label = payload && payload.releaseName
+        ? payload.releaseName
+        : payload && payload.version
+          ? `Versión ${payload.version}`
+          : 'Nueva versión disponible';
+      scrcpyUpdateVersion.textContent = label;
+    }
+    if (scrcpyUpdateChangelog) {
+      const html = formatMultilineText(payload && payload.changelog ? payload.changelog : 'Sin notas de cambio disponibles.');
+      scrcpyUpdateChangelog.innerHTML = html || '<em>Sin notas de cambio disponibles.</em>';
+    }
+    if (scrcpyUpdateButton && updateRequestInFlight) {
+      scrcpyUpdateButton.disabled = true;
+    }
+  }
+
+  function handleUpdateStage(stage) {
+    if (!stage || updateFlowCompleted) return;
+    const normalized = typeof stage === 'string' ? stage.toLowerCase() : '';
+    if (normalized === 'downloading') {
+      setUpdateProgressMessage('Descargando actualización...');
+    } else if (normalized === 'extracting') {
+      setUpdateProgressMessage('Descomprimiendo archivos...');
+    } else if (normalized === 'installing') {
+      setUpdateProgressMessage('Instalando archivos de scrcpy...');
+    }
+  }
+
+  function handleUpdateProgress(progress) {
+    if (!progress || progress.context !== SCRCPY_CONTEXT_UPDATE || updateFlowCompleted) return;
+    const percentValue = Number(progress.percent);
+    const percentText = Number.isFinite(percentValue)
+      ? `${Math.max(0, Math.min(100, Math.round(percentValue)))}%`
+      : null;
+    const receivedText = formatBytes(Number(progress.received));
+    const totalText = formatBytes(Number(progress.total));
+    let message = 'Descargando actualización';
+    if (percentText) {
+      message += ` ${percentText}`;
+    }
+    if (receivedText && totalText) {
+      message += ` (${receivedText} / ${totalText})`;
+    } else if (receivedText) {
+      message += ` (${receivedText})`;
+    }
+    setUpdateProgressMessage(message);
+  }
+
+  function handleUpdateStarted() {
+    updateFlowCompleted = false;
+    updateRequestInFlight = true;
+    if (scrcpyUpdateButton) {
+      scrcpyUpdateButton.disabled = true;
+    }
+    hideUpdateNotice();
+    showUpdateProgressModal();
+    setUpdateProgressTitle('actualizando');
+    showUpdateProgressSpinner(true);
+    setUpdateProgressMessage('Preparando actualización...');
+    setUpdateCloseVisible(false);
+  }
+
+  function handleUpdateComplete(payload) {
+    updateFlowCompleted = true;
+    updateRequestInFlight = false;
+    setUpdateProgressTitle('¡Actualización finalizada!');
+    showUpdateProgressSpinner(false);
+    const message = payload && payload.releaseName
+      ? `${payload.releaseName} instalado correctamente.`
+      : 'Los archivos de scrcpy se actualizaron correctamente.';
+    setUpdateProgressMessage(message);
+    setUpdateCloseVisible(true);
+    pendingUpdateInfo = null;
+    hideUpdateNotice();
+    if (scrcpyUpdateProgressClose) {
+      window.setTimeout(() => {
+        try {
+          scrcpyUpdateProgressClose.focus();
+        } catch {
+          // ignore
+        }
+      }, 150);
+    }
+  }
+
+  function handleUpdateError(payload) {
+    updateFlowCompleted = false;
+    updateRequestInFlight = false;
+    hideUpdateNotice();
+    showUpdateProgressModal();
+    setUpdateProgressTitle('Error');
+    showUpdateProgressSpinner(false);
+    setUpdateProgressMessage((payload && payload.message) || 'No se pudo completar la actualización.');
+    setUpdateCloseVisible(true);
+    if (scrcpyUpdateButton) {
+      scrcpyUpdateButton.disabled = false;
+    }
+  }
+
+  function handleUpdateCheckError(payload) {
+    if (payload && payload.message) {
+      showStatusAndAlert(payload.message);
+    }
+  }
+
+  async function requestScrcpyUpdate() {
+    if (updateRequestInFlight) return;
+    updateFlowCompleted = false;
+    updateRequestInFlight = true;
+    if (scrcpyUpdateButton) {
+      scrcpyUpdateButton.disabled = true;
+    }
+    hideUpdateNotice();
+    showUpdateProgressModal();
+    setUpdateProgressTitle('actualizando');
+    showUpdateProgressSpinner(true);
+    setUpdateProgressMessage('Preparando actualización...');
+    setUpdateCloseVisible(false);
+
+    if (typeof launcher === 'undefined' || typeof launcher.startScrcpyUpdate !== 'function') {
+      updateRequestInFlight = false;
+      showUpdateProgressSpinner(false);
+      setUpdateProgressMessage('La actualización automática no está disponible en este modo.');
+      setUpdateCloseVisible(true);
+      if (scrcpyUpdateButton) {
+        scrcpyUpdateButton.disabled = false;
+      }
+      return;
+    }
+
+    try {
+      const result = await launcher.startScrcpyUpdate();
+      if (result && result.started === false) {
+        updateRequestInFlight = false;
+        showUpdateProgressSpinner(false);
+        let message = 'No se pudo iniciar la actualización.';
+        if (result.reason === 'busy') {
+          message = 'Ya hay una actualización en progreso.';
+        } else if (result.reason === 'up-to-date') {
+          message = 'scrcpy ya está actualizado.';
+        }
+        setUpdateProgressMessage(message);
+        setUpdateCloseVisible(true);
+        if (scrcpyUpdateButton) {
+          scrcpyUpdateButton.disabled = false;
+        }
+        if (result.reason === 'up-to-date') {
+          hideUpdateNotice();
+        }
+      }
+    } catch (error) {
+      updateRequestInFlight = false;
+      showUpdateProgressSpinner(false);
+      setUpdateProgressMessage(getErrorMessage(error) || 'No se pudo iniciar la actualización.');
+      setUpdateCloseVisible(true);
+      if (scrcpyUpdateButton) {
+        scrcpyUpdateButton.disabled = false;
+      }
+    }
+  }
+
+  function handleScrcpyLifecycleEvent(event) {
+    if (!event || typeof event !== 'object') return;
+    const { type, payload } = event;
+    switch (type) {
+      case 'initial-download-started':
+        handleInitialDownloadStarted();
+        break;
+      case 'download-stage':
+        if (payload && payload.context === SCRCPY_CONTEXT_INITIAL) {
+          handleInitialDownloadStage(payload.stage);
+        } else if (payload && payload.context === SCRCPY_CONTEXT_UPDATE) {
+          handleUpdateStage(payload.stage);
+        }
+        break;
+      case 'download-progress':
+        if (payload && payload.context === SCRCPY_CONTEXT_INITIAL) {
+          handleInitialDownloadProgress(payload);
+        } else if (payload && payload.context === SCRCPY_CONTEXT_UPDATE) {
+          handleUpdateProgress(payload);
+        }
+        break;
+      case 'initial-download-complete':
+        handleInitialDownloadComplete(payload);
+        break;
+      case 'initial-download-error':
+        handleInitialDownloadError(payload);
+        break;
+      case 'update-available':
+        handleUpdateAvailable(payload);
+        break;
+      case 'update-started':
+        handleUpdateStarted();
+        break;
+      case 'update-complete':
+        handleUpdateComplete(payload);
+        break;
+      case 'update-error':
+        handleUpdateError(payload);
+        break;
+      case 'update-check-error':
+        handleUpdateCheckError(payload);
+        break;
+      default:
+        break;
+    }
+  }
+
+  const updateAudioButtonState = (state = {}) => {
+    if (!audioBtn) return;
+    const active = Boolean(state && state.active);
+    const closing = Boolean(state && state.closing);
+    audioBtn.classList.toggle('active', active);
+    audioBtn.classList.toggle('closing', closing);
+    audioBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    if (closing) {
+      audioBtn.dataset.state = 'closing';
+      audioBtn.title = 'Cerrando audio...';
+    } else if (active) {
+      audioBtn.dataset.state = 'active';
+      audioBtn.title = 'Audio activo';
+    } else {
+      audioBtn.dataset.state = 'idle';
+      audioBtn.title = 'Audio desactivado';
+    }
+  };
+
+  updateAudioButtonState();
+
+  // Modal elements
+  const appConfigModal = document.getElementById('appConfigModal');
+  const modalClose = document.getElementById('modalClose');
+  const appConfigTitle = document.getElementById('appConfigTitle');
+  const horizontalBtn = document.getElementById('horizontalBtn');
+  const verticalBtn = document.getElementById('verticalBtn');
+  const widthInput = document.getElementById('widthInput');
+  const heightInput = document.getElementById('heightInput');
+  const densityInput = document.getElementById('densityInput');
+  const executeBtn = document.getElementById('executeBtn');
+  const saveForThisApp = document.getElementById('saveForThisApp');
+  const saveForAllApps = document.getElementById('saveForAllApps');
+
+  // Shortcuts modal elements
+  const shortcutsModal = document.getElementById('shortcutsModal');
+  const shortcutsBtn = document.getElementById('shortcutsBtn');
+  const shortcutsModalClose = document.getElementById('shortcutsModalClose');
+
+  const windowElement = document.getElementById('window');
+  const DRAG_THRESHOLD = 2;
+  const dragExemptSelectors = [
+    'button',
+    'input',
+    'textarea',
+    'select',
+    'a',
+    '.window-control',
+    '.context-menu',
+    '.modal-content',
+    '.retry-content',
+    '.orientation-btn',
+    '.settings-btn',
+    '.search-container',
+    '.wifi-section',
+    '.section-header',
+    '.shortcuts-content',
+    '.checkbox-option',
+    '.resolution-inputs',
+    '.top-btns',
+    '.alert-banner',
+    '.bottom-section',
+    '.retry-modal button',
+    '.device-modal'
+  ].join(', ');
+  let isTrackingWindowDrag = false;
+  let dragInitiated = false;
+  let startDragScreenX = 0;
+  let startDragScreenY = 0;
+  let lastDragScreenX = 0;
+  let lastDragScreenY = 0;
+  let previousUserSelect = '';
+  let suppressNextClick = false;
+  let suppressClickTimeoutId = null;
+
+  const canMoveWindow = () => typeof launcher !== 'undefined' && typeof launcher.moveWindow === 'function';
+
+  function shouldSkipWindowDrag(target) {
+    if (!windowElement) return true;
+    const element = target instanceof Element ? target : target && target.parentElement;
+    if (!element) return true;
+    if (!windowElement.contains(element)) return true;
+    if (element.closest(dragExemptSelectors)) return true;
+    return false;
+  }
+
+  const handleWindowDragMove = (event) => {
+    if (!isTrackingWindowDrag) return;
+    if (!canMoveWindow()) {
+      stopWindowDrag();
+      return;
+    }
+
+    const deltaX = event.screenX - lastDragScreenX;
+    const deltaY = event.screenY - lastDragScreenY;
+
+    if (!dragInitiated) {
+      const totalDeltaX = event.screenX - startDragScreenX;
+      const totalDeltaY = event.screenY - startDragScreenY;
+      if (Math.abs(totalDeltaX) < DRAG_THRESHOLD && Math.abs(totalDeltaY) < DRAG_THRESHOLD) {
+        return;
+      }
+      dragInitiated = true;
+    }
+
+    if (deltaX === 0 && deltaY === 0) return;
+    lastDragScreenX = event.screenX;
+    lastDragScreenY = event.screenY;
+    launcher.moveWindow(deltaX, deltaY);
+  };
+
+  const stopWindowDrag = () => {
+    if (!isTrackingWindowDrag) return;
+    isTrackingWindowDrag = false;
+    window.removeEventListener('mousemove', handleWindowDragMove);
+    window.removeEventListener('mouseup', stopWindowDrag);
+    window.removeEventListener('blur', stopWindowDrag);
+    document.removeEventListener('mouseleave', stopWindowDrag);
+    if (document.body) {
+      document.body.style.userSelect = previousUserSelect;
+    }
+    previousUserSelect = '';
+    if (dragInitiated) {
+      if (suppressClickTimeoutId) {
+        clearTimeout(suppressClickTimeoutId);
+      }
+      suppressNextClick = true;
+      suppressClickTimeoutId = window.setTimeout(() => {
+        suppressNextClick = false;
+        suppressClickTimeoutId = null;
+      }, 120);
+    }
+    dragInitiated = false;
+  };
+
+  if (windowElement) {
+    windowElement.addEventListener('mousedown', (event) => {
+      if (event.button !== 0) return;
+      if (!canMoveWindow()) return;
+      if (shouldSkipWindowDrag(event.target)) return;
+      if (isTrackingWindowDrag) return;
+      isTrackingWindowDrag = true;
+      dragInitiated = false;
+      startDragScreenX = event.screenX;
+      startDragScreenY = event.screenY;
+      lastDragScreenX = event.screenX;
+      lastDragScreenY = event.screenY;
+      previousUserSelect = document.body ? (document.body.style.userSelect || '') : '';
+      if (document.body) {
+        document.body.style.userSelect = 'none';
+      }
+      window.addEventListener('mousemove', handleWindowDragMove);
+      window.addEventListener('mouseup', stopWindowDrag);
+      window.addEventListener('blur', stopWindowDrag);
+      document.addEventListener('mouseleave', stopWindowDrag);
+      event.preventDefault();
+    });
+  }
+
+  let currentAppPackage = '';
+  let currentAppName = '';
+  let allPackages = [];
+  let ascending = true;
+  let frequentCollapsed = false;
+  const pendingProcessingPackages = new Set();
+  const pendingLabelUpdates = new Map();
+  const isContextMenuVisible = () => contextMenu.style.display === 'flex';
+  const eventTargetsContextMenu = (event) => {
+    if (!event) return false;
+    if (typeof event.composedPath === 'function') {
+      return event.composedPath().includes(contextMenu);
+    }
+    return contextMenu.contains(event.target);
+  };
+  const hideContextMenu = () => {
+    contextMenu.style.display = 'none';
+    if (contextMenuBackdrop) {
+      contextMenuBackdrop.style.display = 'none';
+    }
+    delete contextMenu.dataset.pkg;
+    delete contextMenu.dataset.name;
+  };
+
+  if (frequentHeader) {
+    frequentHeader.addEventListener('click', () => {
+      frequentCollapsed = !frequentCollapsed;
+      updateFrequentSectionDisplay();
+    });
+  }
+
+  // Event listeners principales
+  if (typeof launcher !== 'undefined') {
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener('click', () => launcher.minimize());
+    }
+    closeBtn.addEventListener('click', () => launcher.close());
+    mirrorBtn.addEventListener('click', () => launcher.mirrorScreen());
+    if (audioBtn) {
+      audioBtn.addEventListener('click', () => {
+        if (!launcher || typeof launcher.activateAudio !== 'function') return;
+        const result = launcher.activateAudio();
+        if (result && typeof result.then === 'function') {
+          result
+            .then((state) => {
+              if (state) updateAudioButtonState(state);
+            })
+            .catch(() => {});
+        }
+      });
+    }
+    let offScrcpyLifecycle = () => {};
+    let offLabelStarted = () => {};
+    let offLabelUpdated = () => {};
+    let offAudioStateChanged = () => {};
+    if (typeof launcher.onScrcpyLifecycleEvent === 'function') {
+      const unsubscribe = launcher.onScrcpyLifecycleEvent(handleScrcpyLifecycleEvent);
+      if (typeof unsubscribe === 'function') {
+        offScrcpyLifecycle = unsubscribe;
+      }
+    }
+    if (typeof launcher.onAppCountsReset === 'function') {
+      launcher.onAppCountsReset(() => {
+        saveCounts({});
+        renderLists(allPackages);
+        status.textContent = 'Contadores reiniciados.';
+      });
+    }
+    if (typeof launcher.getAudioState === 'function') {
+      launcher.getAudioState()
+        .then((state) => updateAudioButtonState(state))
+        .catch(() => {});
+    }
+    if (typeof launcher.onAudioStateChanged === 'function') {
+      offAudioStateChanged = launcher.onAudioStateChanged((state) => updateAudioButtonState(state));
+    }
+    if (typeof launcher.onPackageLabelStarted === 'function') {
+      offLabelStarted = launcher.onPackageLabelStarted((pkg) => {
+        if (!pkg) return;
+        let changed = false;
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (!app || typeof app !== 'object') return app;
+          const shouldProcess = app.package === pkg;
+          if (shouldProcess) found = true;
+          if (app.processing !== shouldProcess) {
+            changed = true;
+            return { ...app, processing: shouldProcess };
+          }
+          return app;
+        });
+        if (!found) {
+          pendingProcessingPackages.add(pkg);
+        } else {
+          pendingProcessingPackages.delete(pkg);
+        }
+        if (changed) {
+          renderLists(allPackages);
+        }
+      });
+    }
+    if (typeof launcher.onPackageLabelUpdated === 'function') {
+      offLabelUpdated = launcher.onPackageLabelUpdated((data = {}) => {
+        const pkg = data.package;
+        if (!pkg) return;
+        const updatedName = data && data.name ? data.name : undefined;
+        const success = Boolean(data && data.success);
+        let changed = false;
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (!app || typeof app !== 'object') return app;
+          if (app.package !== pkg) {
+            if (app.processing) {
+              changed = true;
+              return { ...app, processing: false };
+            }
+            return app;
+          }
+          found = true;
+          const next = {
+            ...app,
+            name: updatedName || app.name || app.package,
+            processing: false,
+            hasLabel: success ? true : app.hasLabel
+          };
+          if (!success && !app.hasLabel) {
+            next.hasLabel = false;
+          }
+          if (app.name !== next.name || app.processing !== next.processing || app.hasLabel !== next.hasLabel) {
+            changed = true;
+          }
+          return next;
+        });
+        pendingProcessingPackages.delete(pkg);
+        if (!found) {
+          pendingLabelUpdates.set(pkg, { name: updatedName, success });
+        } else {
+          pendingLabelUpdates.delete(pkg);
+        }
+        if (changed) {
+          renderLists(allPackages);
+        }
+      });
+    }
+    window.addEventListener('beforeunload', () => {
+      if (typeof offScrcpyLifecycle === 'function') offScrcpyLifecycle();
+      if (typeof offLabelStarted === 'function') offLabelStarted();
+      if (typeof offLabelUpdated === 'function') offLabelUpdated();
+      if (typeof offAudioStateChanged === 'function') offAudioStateChanged();
+    });
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    if (isContextMenuVisible() && !eventTargetsContextMenu(e)) {
+      hideContextMenu();
+    }
+  });
+
+  document.addEventListener('contextmenu', (e) => {
+    if (isContextMenuVisible() && !eventTargetsContextMenu(e)) {
+      hideContextMenu();
+    }
+  }, true);
+
+  if (contextMenuBackdrop) {
+    contextMenuBackdrop.addEventListener('pointerdown', (event) => {
+      if (event.button !== 2) {
+        hideContextMenu();
+      }
+    });
+    contextMenuBackdrop.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      hideContextMenu();
+    });
+  }
+
+  if (scrcpyUpdateButton) {
+    scrcpyUpdateButton.addEventListener('click', () => {
+      requestScrcpyUpdate();
+    });
+  }
+
+  settingsBtn.addEventListener('click', () => {
+    if (typeof launcher !== 'undefined') {
+      launcher.openSettings();
+    } else {
+      console.log('Abrir configuración global');
+    }
+  });
+
+  // Event listener para el botón de atajos
+  shortcutsBtn.addEventListener('click', () => {
+    if (typeof launcher !== 'undefined' && typeof launcher.openShortcuts === 'function') {
+      launcher.openShortcuts();
+    } else {
+      shortcutsModal.classList.add('show');
+    }
+  });
+
+  // Event listeners para cerrar el modal de atajos
+  shortcutsModalClose.addEventListener('click', () => {
+    shortcutsModal.classList.remove('show');
+  });
+
+  shortcutsModal.addEventListener('click', (e) => {
+    if (e.target === shortcutsModal) {
+      shortcutsModal.classList.remove('show');
+    }
+  });
+
+  // Cerrar modal de atajos con Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      let handled = false;
+      if (shortcutsModal.classList.contains('show')) {
+        shortcutsModal.classList.remove('show');
+        handled = true;
+      } else if (appConfigModal.classList.contains('show')) {
+        appConfigModal.classList.remove('show');
+        handled = true;
+      } else if (retryModal.classList.contains('show')) {
+        retryModal.classList.remove('show');
+        handled = true;
+      } else if (deviceModal && deviceModal.classList.contains('show')) {
+        hideDeviceModal();
+        handled = true;
+      }
+      if (isContextMenuVisible()) {
+        hideContextMenu();
+        handled = true;
+      }
+      if (handled) {
+        e.preventDefault();
+      }
+    }
+  });
+
+  // Funciones de localStorage
+  function loadCounts() {
+    try {
+      return JSON.parse(localStorage.getItem('appCounts') || '{}');
+    } catch {
+      return {};
+    }
+  }
+  
+  function saveCounts(c) {
+    localStorage.setItem('appCounts', JSON.stringify(c));
+  }
+
+  const LAST_WIFI_STORAGE_KEY = 'lastWifiAddress';
+
+  function getStoredWifiAddress() {
+    try {
+      return JSON.parse(localStorage.getItem(LAST_WIFI_STORAGE_KEY) || 'null');
+    } catch {
+      return null;
+    }
+  }
+
+  function persistWifiAddress(ip, port) {
+    try {
+      const payload = {
+        ip: typeof ip === 'string' ? ip : '',
+        port: typeof port === 'string' ? port : ''
+      };
+      localStorage.setItem(LAST_WIFI_STORAGE_KEY, JSON.stringify(payload));
+      applyStoredWifiAddress();
+    } catch {
+      /* noop */
+    }
+  }
+
+  function applyStoredWifiAddress() {
+    const stored = getStoredWifiAddress();
+    if (!stored) return;
+    if (ipInput) ipInput.value = stored.ip || '';
+    if (portInput) portInput.value = stored.port || '';
+  }
+
+  applyStoredWifiAddress();
+
+  function applyPendingPackageEvents() {
+    if (!Array.isArray(allPackages) || allPackages.length === 0) return;
+    allPackages = allPackages.map(app => {
+      if (!app || typeof app !== 'object') return app;
+      const pkg = app.package;
+      let next = app;
+      if (pendingProcessingPackages.has(pkg)) {
+        pendingProcessingPackages.delete(pkg);
+        if (!next.processing) {
+          next = { ...next, processing: true };
+        }
+      }
+      if (pendingLabelUpdates.has(pkg)) {
+        const update = pendingLabelUpdates.get(pkg) || {};
+        pendingLabelUpdates.delete(pkg);
+        const success = Boolean(update && update.success);
+        const updatedName = update && update.name ? update.name : undefined;
+        const candidate = {
+          ...next,
+          name: updatedName || next.name || pkg,
+          processing: false,
+          hasLabel: success ? true : next.hasLabel
+        };
+        if (!success && !next.hasLabel) {
+          candidate.hasLabel = false;
+        }
+        next = candidate;
+      }
+      return next;
+    });
+  }
+
+  function normalizeDeviceList(devices) {
+    if (!Array.isArray(devices)) return [];
+    const map = new Map();
+    devices.forEach(entry => {
+      let normalized = null;
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (!trimmed) return;
+        normalized = {
+          id: trimmed,
+          state: 'device',
+          details: '',
+          raw: trimmed
+        };
+      } else if (entry && typeof entry === 'object') {
+        const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+        if (!id) return;
+        const state = typeof entry.state === 'string' ? entry.state.trim().toLowerCase() : '';
+        const details = typeof entry.details === 'string' ? entry.details.trim() : '';
+        const raw = typeof entry.raw === 'string' ? entry.raw : '';
+        normalized = { id, state, details, raw };
+      }
+      if (!normalized) return;
+      if (map.has(normalized.id)) {
+        const current = map.get(normalized.id);
+        if (!current.state && normalized.state) current.state = normalized.state;
+        if (!current.details && normalized.details) current.details = normalized.details;
+        if (!current.raw && normalized.raw) current.raw = normalized.raw;
+      } else {
+        map.set(normalized.id, normalized);
+      }
+    });
+    return Array.from(map.values());
+  }
+
+  function getDeviceStateLabel(state) {
+    const normalized = (state || '').toLowerCase();
+    if (!normalized) return 'Desconocido';
+    return DEVICE_STATE_LABELS[normalized] || state || 'Desconocido';
+  }
+
+  function getDeviceStateClass(state) {
+    const normalized = (state || '').toLowerCase();
+    if (['device', 'unauthorized', 'offline', 'authorizing'].includes(normalized)) {
+      return `device-state-${normalized}`;
+    }
+    return 'device-state-unknown';
+  }
+
+  function getDeviceStateMessage(state, deviceId) {
+    const normalized = (state || '').toLowerCase();
+    if (!normalized) return '';
+    if (normalized === 'offline') {
+      if (typeof deviceId === 'string' && deviceId.includes(':')) {
+        return OFFLINE_GENERIC_MESSAGE;
+      }
+      return OFFLINE_USB_MESSAGE;
+    }
+    if (DEVICE_STATE_MESSAGES[normalized]) {
+      return DEVICE_STATE_MESSAGES[normalized];
+    }
+    if (normalized === 'device') {
+      return '';
+    }
+    const label = getDeviceStateLabel(state);
+    const subject = deviceId ? `El dispositivo ${deviceId}` : 'El dispositivo seleccionado';
+    return `${subject} está en estado "${label}" reportado por ADB.`;
+  }
+
+  function getDeviceConnectionDetails(device) {
+    if (!device || typeof device !== 'object') return '';
+    if (device.details) return device.details;
+    const id = typeof device.id === 'string' ? device.id : '';
+    if (id && id.includes(':')) {
+      return 'Conexión por Wi-Fi detectada.';
+    }
+    return '';
+  }
+
+  async function attemptRecoverOfflineWifiDevice(device, triggerElement) {
+    if (!device || typeof device.id !== 'string') {
+      showStatusAndAlert(OFFLINE_GENERIC_MESSAGE);
+      return;
+    }
+    const deviceId = device.id;
+    if (typeof launcher === 'undefined') {
+      showStatusAndAlert(OFFLINE_GENERIC_MESSAGE);
+      return;
+    }
+
+    if (triggerElement) {
+      triggerElement.disabled = true;
+    }
+
+    const log = [];
+    const appendLog = (value) => {
+      if (!value) return;
+      const text = typeof value === 'string' ? value.trim() : String(value);
+      if (text) log.push(text);
+    };
+
+    status.textContent = `Intentando reconectar ${deviceId}...`;
+
+    try {
+      if (typeof launcher.disconnectDevice === 'function') {
+        const disconnectOut = await launcher.disconnectDevice(deviceId);
+        appendLog(disconnectOut);
+      }
+    } catch (error) {
+      appendLog(getErrorMessage(error));
+    }
+
+    try {
+      if (typeof launcher.reconnectDevice === 'function') {
+        const reconnectOut = await launcher.reconnectDevice(deviceId);
+        appendLog(reconnectOut);
+      }
+    } catch (error) {
+      appendLog(getErrorMessage(error));
+    }
+
+    let refreshed = null;
+    try {
+      if (typeof launcher.refreshDevices === 'function') {
+        refreshed = await launcher.refreshDevices();
+        if (refreshed && typeof refreshed.output === 'string') {
+          appendLog(refreshed.output);
+        }
+      }
+    } catch (error) {
+      appendLog(getErrorMessage(error));
+    }
+
+    const combinedLog = log.filter(Boolean).join('\n');
+    if (combinedLog) {
+      status.textContent = combinedLog;
+    }
+
+    let updatedList = [];
+    if (refreshed && Array.isArray(refreshed.devices)) {
+      updatedList = normalizeDeviceList(refreshed.devices);
+    }
+
+    let updatedDevice = null;
+    if (updatedList.length) {
+      updatedDevice = updatedList.find(item => item.id === deviceId) || null;
+    }
+    if (!updatedDevice) {
+      updatedDevice = normalizeDeviceList([device]).find(item => item.id === deviceId) || null;
+    }
+
+    if (updatedDevice && (updatedDevice.state || '').toLowerCase() === 'device') {
+      if (triggerElement) {
+        triggerElement.disabled = false;
+      }
+      hideDeviceModal();
+      if (deviceId.includes(':')) {
+        const [ip = '', port = ''] = deviceId.split(':');
+        persistWifiAddress(ip, port);
+      }
+      const successMessage = combinedLog || `Dispositivo seleccionado: ${deviceId}`;
+      await activateDevice(deviceId, {
+        statusMessage: successMessage
+      });
+      return;
+    }
+
+    if (updatedList.length) {
+      showDeviceModal(updatedList);
+    }
+
+    const finalState = updatedDevice ? (updatedDevice.state || '').toLowerCase() : '';
+    if (finalState === 'unauthorized') {
+      showStatusAndAlert(UNAUTHORIZED_ERROR_MESSAGE);
+    } else if (finalState === 'offline') {
+      showStatusAndAlert(OFFLINE_GENERIC_MESSAGE);
+    } else if (updatedDevice && updatedDevice.raw) {
+      showStatusAndAlert(updatedDevice.raw);
+    } else if (combinedLog) {
+      showStatusAndAlert(combinedLog);
+    } else {
+      showStatusAndAlert(`No fue posible reconectar ${deviceId}.`);
+    }
+
+    if (triggerElement) {
+      triggerElement.disabled = false;
+    }
+  }
+
+  async function handleDeviceSelection(device, triggerElement) {
+    try {
+      if (!device || typeof device.id !== 'string') return;
+      const deviceId = device.id;
+      const state = (device.state || '').toLowerCase();
+
+      if (state === 'device') {
+        hideDeviceModal();
+        await activateDevice(deviceId, {
+          statusMessage: `Dispositivo seleccionado: ${deviceId}`
+        });
+        return;
+      }
+
+      if (state === 'offline') {
+        if (deviceId.includes(':')) {
+          await attemptRecoverOfflineWifiDevice(device, triggerElement);
+        } else {
+          showStatusAndAlert(OFFLINE_USB_MESSAGE);
+          if (triggerElement) triggerElement.disabled = false;
+        }
+        return;
+      }
+
+      if (state === 'unauthorized') {
+        showStatusAndAlert(UNAUTHORIZED_ERROR_MESSAGE);
+        if (triggerElement) triggerElement.disabled = false;
+        return;
+      }
+
+      const rawMessage = typeof device.raw === 'string' ? device.raw.trim() : '';
+      if (rawMessage) {
+        showStatusAndAlert(rawMessage);
+      } else {
+        const fallback = `${deviceId}${state ? ` ${state}` : ''}`.trim();
+        showStatusAndAlert(fallback || `Estado desconocido para ${deviceId}`);
+      }
+    } catch (error) {
+      showStatusAndAlert(getErrorMessage(error));
+    } finally {
+      if (triggerElement) {
+        triggerElement.disabled = false;
+      }
+    }
+  }
+
+  function hideDeviceModal() {
+    if (!deviceModal) return;
+    deviceModal.classList.remove('show');
+    deviceModal.setAttribute('aria-hidden', 'true');
+    if (deviceList) {
+      deviceList.innerHTML = '';
+    }
+  }
+
+  function showDeviceModal(devices = []) {
+    if (!deviceModal || !deviceList) return;
+    deviceList.innerHTML = '';
+    const normalizedDevices = normalizeDeviceList(devices);
+
+    if (normalizedDevices.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'device-empty';
+      empty.textContent = 'No hay dispositivos disponibles.';
+      deviceList.appendChild(empty);
+    } else {
+      normalizedDevices.forEach(device => {
+        const deviceId = device.id;
+        const state = (device.state || '').toLowerCase();
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'device-option';
+
+        const header = document.createElement('div');
+        header.className = 'device-option-header';
+
+        const idSpan = document.createElement('span');
+        idSpan.className = 'device-id';
+        idSpan.textContent = deviceId;
+        header.appendChild(idSpan);
+
+        const stateSpan = document.createElement('span');
+        stateSpan.className = `device-state-tag ${getDeviceStateClass(state)}`;
+        stateSpan.textContent = getDeviceStateLabel(state);
+        header.appendChild(stateSpan);
+
+        option.appendChild(header);
+
+        const connectionInfo = getDeviceConnectionDetails(device);
+        if (connectionInfo) {
+          const detailsEl = document.createElement('div');
+          detailsEl.className = 'device-details';
+          detailsEl.textContent = connectionInfo;
+          option.appendChild(detailsEl);
+        }
+
+        const messageForState = getDeviceStateMessage(state, deviceId);
+        if (messageForState) {
+          const messageEl = document.createElement('div');
+          messageEl.className = 'device-state-message';
+          messageEl.textContent = messageForState;
+          option.appendChild(messageEl);
+        }
+
+        option.addEventListener('click', () => {
+          option.disabled = true;
+          handleDeviceSelection(device, option);
+        });
+
+        deviceList.appendChild(option);
+      });
+    }
+
+    deviceModal.classList.add('show');
+    deviceModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function updateFrequentSectionDisplay() {
+    const hasSearchTerm = Boolean(search.value && search.value.trim());
+    const hasFrequentItems = frequentList && frequentList.children.length > 0;
+    const shouldHideSection = hasSearchTerm || !hasFrequentItems;
+
+    if (frequentSection) {
+      frequentSection.style.display = shouldHideSection ? 'none' : '';
+    }
+    if (frequentHeader) {
+      const expanded = !shouldHideSection && !frequentCollapsed;
+      frequentHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      frequentHeader.classList.toggle('is-collapsed', frequentCollapsed);
+      frequentHeader.disabled = shouldHideSection;
+    }
+    if (frequentList) {
+      if (shouldHideSection) {
+        frequentList.style.display = '';
+      } else {
+        frequentList.style.display = frequentCollapsed ? 'none' : '';
+      }
+    }
+  }
+
+  // Función para crear elementos de app
+  function createItem(app) {
+    const pkg = app.package;
+    const displayName = app.name || pkg;
+    const li = document.createElement('li');
+    li.className = 'app-item';
+    li.setAttribute('data-package', pkg);
+    li.dataset.search = `${displayName} ${pkg}`.toLowerCase();
+
+    const content = document.createElement('div');
+    content.className = 'app-item-content';
+    li.appendChild(content);
+
+    if (app.processing) {
+      const spinner = document.createElement('span');
+      spinner.className = 'loading-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+      content.appendChild(spinner);
+    }
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'app-label';
+    nameSpan.textContent = displayName;
+    content.appendChild(nameSpan);
+
+    const handleItemClick = async () => {
+      if (typeof launcher !== 'undefined') {
+        const pref = await launcher.getPreferences(pkg);
+        if (pref) {
+          const prefConfig = typeof pref === 'object' && pref !== null ? { ...pref } : {};
+          prefConfig.appName = displayName;
+          launchApp(pkg, prefConfig);
+        } else {
+          openAppConfig(pkg, displayName);
+        }
+      } else {
+        openAppConfig(pkg, displayName);
+      }
+    };
+
+    content.addEventListener('click', (event) => {
+      if (suppressNextClick) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      handleItemClick();
+    });
+    content.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showContextMenu(pkg, displayName, e.clientX, e.clientY);
+    });
+    return li;
+  }
+
+  // Función para abrir configuración de app
+  function openAppConfig(packageName, appName, pref = {}) {
+    currentAppPackage = packageName;
+    currentAppName = appName || packageName;
+    appConfigTitle.textContent = `Configurar ${appName}`;
+    appConfigModal.classList.add('show');
+
+    widthInput.value = pref.width || '';
+    heightInput.value = pref.height || '';
+    densityInput.value = pref.density || '';
+    executeBtn.style.display = 'block';
+    horizontalBtn.disabled = false;
+    verticalBtn.disabled = false;
+    saveForThisApp.checked = false;
+    saveForAllApps.checked = false;
+  }
+
+  // Event listeners del modal
+  modalClose.addEventListener('click', () => {
+    appConfigModal.classList.remove('show');
+  });
+
+  appConfigModal.addEventListener('click', (e) => {
+    if (e.target === appConfigModal) {
+      appConfigModal.classList.remove('show');
+    }
+  });
+
+  function showContextMenu(pkg, name, x, y) {
+    if (contextMenuBackdrop) {
+      contextMenuBackdrop.style.display = 'block';
+    }
+    contextMenu.style.display = 'flex';
+    contextMenu.style.top = `${y}px`;
+    contextMenu.style.left = `${x}px`;
+    contextMenu.dataset.pkg = pkg;
+    contextMenu.dataset.name = name;
+
+    const rect = contextMenu.getBoundingClientRect();
+    let adjustedX = x;
+    let adjustedY = y;
+
+    if (rect.right > window.innerWidth) {
+      adjustedX = Math.max(0, x - (rect.right - window.innerWidth));
+    }
+    if (rect.bottom > window.innerHeight) {
+      adjustedY = Math.max(0, y - (rect.bottom - window.innerHeight));
+    }
+
+    contextMenu.style.left = `${adjustedX}px`;
+    contextMenu.style.top = `${adjustedY}px`;
+  }
+
+  contextMenu.addEventListener('click', async (e) => {
+    const option = typeof e.composedPath === 'function'
+      ? e.composedPath().find(node => node instanceof HTMLElement && node.dataset && node.dataset.action)
+      : (e.target instanceof HTMLElement ? e.target.closest('[data-action]') : null);
+    const action = option && option.dataset ? option.dataset.action : null;
+    const pkg = contextMenu.dataset.pkg;
+    const name = contextMenu.dataset.name;
+    if (!action || !pkg) return;
+    if (action === 'vertical') {
+      launchApp(pkg, { orientation: 'vertical', appName: name || pkg });
+    } else if (action === 'horizontal') {
+      launchApp(pkg, { orientation: 'horizontal', appName: name || pkg });
+    } else if (action === 'edit') {
+      const pref = typeof launcher !== 'undefined' ? await launcher.getPreferences(pkg) : {};
+      openAppConfig(pkg, name, pref || {});
+    } else if (action === 'reset') {
+      if (typeof launcher !== 'undefined') {
+        await launcher.resetPreferences(pkg);
+      }
+    }
+    hideContextMenu();
+  });
+
+  horizontalBtn.addEventListener('click', () => {
+    const config = {
+      orientation: 'horizontal',
+      density: parseInt(densityInput.value) || undefined,
+      saveForThis: saveForThisApp.checked,
+      saveForAll: saveForAllApps.checked,
+      appName: currentAppName || currentAppPackage
+    };
+    launchApp(currentAppPackage, config);
+    appConfigModal.classList.remove('show');
+  });
+
+  verticalBtn.addEventListener('click', () => {
+    const config = {
+      orientation: 'vertical',
+      density: parseInt(densityInput.value) || undefined,
+      saveForThis: saveForThisApp.checked,
+      saveForAll: saveForAllApps.checked,
+      appName: currentAppName || currentAppPackage
+    };
+    launchApp(currentAppPackage, config);
+    appConfigModal.classList.remove('show');
+  });
+
+  executeBtn.addEventListener('click', () => {
+    const config = {
+      width: parseInt(widthInput.value) || null,
+      height: parseInt(heightInput.value) || null,
+      density: parseInt(densityInput.value) || null,
+      saveForThis: saveForThisApp.checked,
+      saveForAll: saveForAllApps.checked,
+      appName: currentAppName || currentAppPackage
+    };
+    launchApp(currentAppPackage, config);
+    appConfigModal.classList.remove('show');
+  });
+
+  // Monitor changes in resolution inputs
+  [widthInput, heightInput].forEach(input => {
+    input.addEventListener('input', () => {
+      const hasCustomResolution = widthInput.value || heightInput.value;
+      horizontalBtn.disabled = hasCustomResolution;
+      verticalBtn.disabled = hasCustomResolution;
+      executeBtn.style.display = hasCustomResolution ? 'block' : 'none';
+    });
+  });
+
+  // Prevent both checkboxes from being selected
+  saveForThisApp.addEventListener('change', () => {
+    if (saveForThisApp.checked) {
+      saveForAllApps.checked = false;
+    }
+  });
+
+  saveForAllApps.addEventListener('change', () => {
+    if (saveForAllApps.checked) {
+      saveForThisApp.checked = false;
+    }
+  });
+
+  function getAppDisplayName(packageName) {
+    const match = allPackages.find(app => app.package === packageName);
+    if (match && match.name) {
+      return match.name;
+    }
+    return packageName;
+  }
+
+  // Función para lanzar app
+  function launchApp(packageName, config = {}) {
+    console.log('Launching app:', packageName, config);
+
+    const counts = loadCounts();
+    counts[packageName] = (counts[packageName] || 0) + 1;
+    saveCounts(counts);
+    renderLists(allPackages);
+
+    const providedName = typeof config.appName === 'string' ? config.appName.trim() : '';
+    const finalAppName = providedName || getAppDisplayName(packageName);
+    const payload = { ...config };
+    if (finalAppName) {
+      payload.appName = finalAppName;
+    } else {
+      delete payload.appName;
+    }
+
+    if (typeof launcher !== 'undefined') {
+      launcher.launchApp(packageName, payload);
+    }
+
+    status.textContent = `Abriendo ${finalAppName || packageName}...`;
+  }
+
+  async function fetchAndRenderPackages(deviceId) {
+    if (typeof launcher === 'undefined' || typeof launcher.listPackages !== 'function') return;
+    const packages = await launcher.listPackages(deviceId);
+    allPackages = packages.map(app => ({ ...app, processing: false }));
+    applyPendingPackageEvents();
+    renderLists(allPackages);
+  }
+
+  async function activateDevice(deviceId, options = {}) {
+    if (typeof launcher === 'undefined') return;
+    const selectedDevice = typeof deviceId === 'string' ? deviceId.trim() : '';
+    if (!selectedDevice) return;
+    const preparingMessage = options.preparingMessage || `Preparando ${selectedDevice}...`;
+    if (preparingMessage) {
+      status.textContent = preparingMessage;
+    }
+    try {
+      if (typeof launcher.setCurrentDevice === 'function') {
+        await launcher.setCurrentDevice(selectedDevice);
+      }
+      await fetchAndRenderPackages(selectedDevice);
+      const finalMessage = options.statusMessage || `Dispositivo seleccionado: ${selectedDevice}`;
+      if (finalMessage) {
+        status.textContent = finalMessage;
+      }
+    } catch (error) {
+      const message = error && typeof error.message === 'string' ? error.message : String(error);
+      status.textContent = `Error al preparar ${selectedDevice}: ${message}`;
+    }
+  }
+
+  // Función para renderizar listas
+  function renderLists(pkgs) {
+    const counts = loadCounts();
+
+    // Apps frecuentes
+    const frequent = pkgs
+      .filter(app => counts[app.package])
+      .sort((a, b) => (counts[b.package] || 0) - (counts[a.package] || 0))
+      .slice(0, 5);
+
+    frequentList.innerHTML = '';
+    frequent.forEach(app => {
+      frequentList.appendChild(createItem(app));
+    });
+
+    // Todas las apps
+    const sorted = [...pkgs].sort((a, b) => {
+      const nameA = (a.name || a.package || '').toLowerCase();
+      const nameB = (b.name || b.package || '').toLowerCase();
+      return ascending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+    });
+
+    allList.innerHTML = '';
+    sorted.forEach(app => {
+      allList.appendChild(createItem(app));
+    });
+
+    applySearchFilter();
+  }
+
+  function applySearchFilter() {
+    const term = (search.value || '').trim().toLowerCase();
+    const items = allList.querySelectorAll('li');
+    items.forEach(item => {
+      const text = item.dataset.search || item.textContent.toLowerCase();
+      item.style.display = term ? (text.includes(term) ? 'flex' : 'none') : 'flex';
+    });
+    updateFrequentSectionDisplay();
+  }
+
+  // Event listeners para búsqueda e inversión
+  invertBtn.addEventListener('click', () => {
+    ascending = !ascending;
+    renderLists(allPackages);
+  });
+
+  search.addEventListener('input', applySearchFilter);
+
+  async function attemptConnect() {
+    status.textContent = 'Conectando...';
+    hideDeviceModal();
+
+    if (typeof launcher !== 'undefined') {
+      try {
+        const result = await launcher.connect();
+        const output = result && typeof result.output === 'string' ? result.output.trim() : '';
+        let statusMessage = output || 'Conexión completada.';
+        if (statusMessage) {
+          status.textContent = statusMessage;
+        }
+
+        const devices = normalizeDeviceList(result && Array.isArray(result.devices) ? result.devices : []);
+
+        if (devices.length === 0) {
+          retryModal.classList.add('show');
+          return;
+        }
+
+        retryModal.classList.remove('show');
+        if (devices.length === 1 && (devices[0].state || '').toLowerCase() === 'device') {
+          const selected = devices[0];
+          await activateDevice(selected.id, {
+            preparingMessage: statusMessage,
+            statusMessage: `Dispositivo seleccionado: ${selected.id}`
+          });
+          return;
+        }
+
+        showDeviceModal(devices);
+        const guidance = 'Selecciona un dispositivo para continuar.';
+        status.textContent = statusMessage ? `${statusMessage}\n${guidance}` : guidance;
+      } catch (error) {
+        const message = error && typeof error.message === 'string' ? error.message : String(error);
+        status.textContent = message;
+      }
+    } else {
+      // Modo demo
+      status.textContent = 'Conectado (modo demo)';
+      const demoApps = Array.from(allList.querySelectorAll('li')).map(li => ({
+        package: li.getAttribute('data-package'),
+        name: li.textContent,
+        processing: false
+      }));
+      allPackages = demoApps;
+      renderLists(allPackages);
+    }
+  }
+
+  connectBtn.addEventListener('click', attemptConnect);
+  retryBtn.addEventListener('click', attemptConnect);
+
+  if (retryModalClose) {
+    retryModalClose.addEventListener('click', () => {
+      retryModal.classList.remove('show');
+    });
+  }
+
+  retryModal.addEventListener('click', (e) => {
+    if (e.target === retryModal) {
+      retryModal.classList.remove('show');
+    }
+  });
+
+  if (deviceModalClose) {
+    deviceModalClose.addEventListener('click', () => {
+      hideDeviceModal();
+    });
+  }
+
+  if (deviceModal) {
+    deviceModal.addEventListener('click', (event) => {
+      if (event.target === deviceModal) {
+        hideDeviceModal();
+      }
+    });
+  }
+
+  wifiBtn.addEventListener('click', async () => {
+    if (typeof launcher === 'undefined') return;
+    const ipValue = typeof ipInput?.value === 'string' ? ipInput.value.trim() : '';
+    const portValue = typeof portInput?.value === 'string' ? portInput.value.trim() : '';
+    const colonDevice = `${ipValue}:${portValue}`;
+    const targetDevice = portValue ? colonDevice : ipValue;
+    status.textContent = 'Conectando por Wi-Fi...';
+    hideInlineAlert();
+    hideDeviceModal();
+
+    try {
+      const out = await launcher.connectWifi(ipValue, portValue);
+      const trimmed = typeof out === 'string' ? out.trim() : '';
+      if (trimmed) {
+        status.textContent = trimmed;
+      }
+      const normalizedMessage = trimmed.toLowerCase();
+      const successMessages = new Set();
+      [colonDevice, targetDevice].forEach(candidate => {
+        if (!candidate) return;
+        successMessages.add(`connected to ${candidate}`.toLowerCase());
+        successMessages.add(`already connected to ${candidate}`.toLowerCase());
+      });
+
+      if (successMessages.has(normalizedMessage)) {
+        persistWifiAddress(ipValue, portValue);
+        retryModal.classList.remove('show');
+        await activateDevice(targetDevice, { statusMessage: trimmed });
+      } else {
+        const fallbackMessage = trimmed || 'No se pudo conectar por Wi-Fi.';
+        showStatusAndAlert(fallbackMessage, { restoreFocus: true });
+      }
+    } catch (error) {
+      const message = getErrorMessage(error) || 'No se pudo conectar por Wi-Fi.';
+      showStatusAndAlert(message, { restoreFocus: true });
+    }
+  });
+
+  // Inicialización con apps de ejemplo
+  allPackages = [];
+  updateFrequentSectionDisplay();
+});
+</script>
+</body>
+</html>

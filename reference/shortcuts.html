@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Atajos de Teclado</title>
+<style>
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: transparent;
+    color: #f7fafc;
+    -webkit-app-region: drag;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    height: 100vh;
+    padding: 24px;
+    overflow: hidden;
+  }
+
+  button {
+    -webkit-app-region: no-drag;
+  }
+
+  #window {
+    position: relative;
+    width: 520px;
+    max-width: 520px;
+    height: calc(100vh - 48px);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    background: rgba(32, 32, 32, 0.95);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .window-controls {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    display: flex;
+    gap: 8px;
+    z-index: 3;
+    -webkit-app-region: no-drag;
+  }
+
+  .window-control {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: #f7fafc;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0;
+  }
+
+  .window-control:hover,
+  .window-control:focus-visible {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fecaca;
+  }
+
+  .window-control:focus-visible {
+    outline: 2px solid rgba(239, 68, 68, 0.4);
+    outline-offset: 2px;
+  }
+
+  .header {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 50%, rgba(32, 32, 32, 0.95) 100%);
+    padding: 38px 32px 26px;
+    text-align: center;
+    flex-shrink: 0;
+    position: relative;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .header::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.25), transparent 60%),
+                radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.2), transparent 60%);
+    pointer-events: none;
+  }
+
+  .header h1 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #f8fafc;
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .content {
+    -webkit-app-region: no-drag;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 0 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .content::-webkit-scrollbar {
+    width: 14px;
+  }
+
+  .content::-webkit-scrollbar-track {
+    background: rgba(30, 30, 45, 0.8);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .content::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
+    border-radius: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .content::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 100%);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .section {
+    margin: 0 28px 2px 28px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: visible;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .section-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(32, 32, 32, 0.95);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    padding: 20px 28px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
+                0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .section-icon {
+    font-size: 22px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  }
+
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .section-description {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  .shortcuts-grid {
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .shortcut-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 18px 0;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+  }
+
+  .shortcut-item:last-child {
+    border-bottom: none;
+  }
+
+  .shortcut-item:hover {
+    background: rgba(14, 165, 233, 0.15);
+    margin: 0 -28px;
+    padding-left: 28px;
+    padding-right: 28px;
+    border-radius: 10px;
+    box-shadow: inset 0 2px 8px rgba(14, 165, 233, 0.2);
+  }
+
+  .shortcut-action {
+    flex: 1;
+    font-size: 15px;
+    color: #ffffff;
+    line-height: 1.4;
+    font-weight: 600;
+  }
+
+  .shortcut-keys {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    max-width: 50%;
+  }
+
+  .key {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.25) 100%);
+    color: #ffffff;
+    padding: 7px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 32px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .key.primary {
+    background: linear-gradient(135deg, rgba(0, 120, 212, 0.8) 0%, rgba(0, 96, 170, 0.9) 100%);
+    color: #ffffff;
+    border-color: rgba(0, 120, 212, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 120, 212, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .key.secondary {
+    background: linear-gradient(135deg, rgba(106, 90, 205, 0.8) 0%, rgba(85, 70, 165, 0.9) 100%);
+    color: #ffffff;
+    border-color: rgba(106, 90, 205, 0.4);
+    box-shadow: 0 2px 8px rgba(106, 90, 205, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .key-separator {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 700;
+    padding: 0 4px;
+    font-size: 14px;
+  }
+
+  .mouse-action {
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.8) 0%, rgba(56, 115, 180, 0.9) 100%);
+    color: #ffffff;
+    padding: 7px 14px;
+    border-radius: 25px;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(74, 144, 226, 0.4);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    body {
+      padding: 16px;
+    }
+
+    #window {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .shortcut-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .shortcut-keys {
+      max-width: 100%;
+      justify-content: flex-start;
+    }
+
+    .shortcuts-grid {
+      padding: 20px 24px;
+    }
+
+    .section-header {
+      padding: 18px 24px;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+</style>
+</head>
+<body>
+  <div id="window">
+    <div class="window-controls">
+      <button type="button" id="closeShortcuts" class="window-control" aria-label="Cerrar ventana de atajos">✖</button>
+    </div>
+
+    <div class="header">
+      <h1>⌨️ Atajos</h1>
+    </div>
+
+    <div class="content">
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon">🔥</div>
+          <div>
+            <div class="section-title">Atajos Esenciales</div>
+            <div class="section-description">Los más utilizados en el día a día</div>
+          </div>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <div class="shortcut-action">Pantalla completa</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">F</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Apagar pantalla del dispositivo (mantiene el mirror)</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">O</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Encender pantalla del dispositivo</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">O</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Botón HOME</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">H</span>
+              <span class="key-separator">|</span>
+              <span class="mouse-action">Clic central</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Botón ATRÁS</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">B</span>
+              <span class="key-separator">|</span>
+              <span class="mouse-action">Clic derecho</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Cambiar entre aplicaciones (APP_SWITCH)</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">S</span>
+              <span class="key-separator">|</span>
+              <span class="mouse-action">4º clic</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Expandir panel de notificaciones</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">N</span>
+              <span class="key-separator">|</span>
+              <span class="mouse-action">5º clic</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon">🖱️</div>
+          <div>
+            <div class="section-title">Atajos de Mouse Especiales</div>
+            <div class="section-description">Gestos multi-touch y funciones adicionales del mouse</div>
+          </div>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <div class="shortcut-action">Pellizcar para zoom/rotar</div>
+            <div class="shortcut-keys">
+              <span class="key secondary">Ctrl</span><span class="key-separator">+</span><span class="mouse-action">Clic y arrastrar</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Inclinar verticalmente (deslizar con 2 dedos)</div>
+            <div class="shortcut-keys">
+              <span class="key secondary">Shift</span><span class="key-separator">+</span><span class="mouse-action">Clic y arrastrar</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Inclinar horizontalmente (deslizar con 2 dedos)</div>
+            <div class="shortcut-keys">
+              <span class="key secondary">Ctrl</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="mouse-action">Clic y arrastrar</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Encender pantalla (si está apagada)</div>
+            <div class="shortcut-keys">
+              <span class="mouse-action">Clic derecho</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon">📱</div>
+          <div>
+            <div class="section-title">Control de Dispositivo</div>
+            <div class="section-description">Botones físicos y control de pantalla</div>
+          </div>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <div class="shortcut-action">Subir volumen</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">↑</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Bajar volumen</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">↓</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Botón POWER</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">P</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Rotar pantalla del dispositivo</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">R</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Botón MENÚ (desbloquear pantalla)</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">M</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Pausar pantalla</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">Z</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Reanudar pantalla</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">Z</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon">🖥️</div>
+          <div>
+            <div class="section-title">Gestión de Ventana</div>
+            <div class="section-description">Redimensionar y ajustar la ventana</div>
+          </div>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <div class="shortcut-action">Ventana 1:1 (pixel-perfect)</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">G</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Quitar bordes negros</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">W</span>
+              <span class="key-separator">|</span>
+              <span class="mouse-action">Doble clic izq.</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Rotar vista a la izquierda</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">←</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Rotar vista a la derecha</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">→</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Voltear horizontalmente</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">←/→</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Voltear verticalmente</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">↑/↓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon">⚙️</div>
+          <div>
+            <div class="section-title">Funciones Avanzadas</div>
+            <div class="section-description">Clipboard, notificaciones y funciones especiales</div>
+          </div>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <div class="shortcut-action">Copiar al portapapeles</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">C</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Cortar al portapapeles</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">X</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Sincronizar portapapeles y pegar</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">V</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Inyectar texto del portapapeles de PC</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">V</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Expandir panel de configuración</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">N</span><span class="key">N</span>
+              <span class="key-separator">|</span>
+              <span class="mouse-action">Doble 5º clic</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Cerrar paneles</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">N</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Mostrar/ocultar contador FPS</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">I</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Reiniciar captura de video</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key secondary">Shift</span><span class="key-separator">+</span><span class="key">R</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-icon">🛠️</div>
+          <div>
+            <div class="section-title">Funciones Especializadas</div>
+            <div class="section-description">Instalación, transferencia y configuraciones</div>
+          </div>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <div class="shortcut-action">Instalar APK</div>
+            <div class="shortcut-keys">
+              <span class="mouse-action">Arrastrar archivo .APK</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Transferir archivo al dispositivo</div>
+            <div class="shortcut-keys">
+              <span class="mouse-action">Arrastrar archivo (no APK)</span>
+            </div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-action">Abrir configuración de teclado (solo HID)</div>
+            <div class="shortcut-keys">
+              <span class="key primary">Alt</span><span class="key-separator">+</span><span class="key">K</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const closeBtn = document.getElementById('closeShortcuts');
+
+      const closeWindow = () => {
+        if (typeof launcher !== 'undefined' && typeof launcher.closeShortcuts === 'function') {
+          launcher.closeShortcuts();
+        } else {
+          window.close();
+        }
+      };
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', closeWindow);
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeWindow();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

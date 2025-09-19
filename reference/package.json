@@ -1,0 +1,24 @@
+{
+  "name": "small-scrcpy-launcher",
+  "version": "1.0.0",
+  "description": "Electron launcher for scrcpy",
+  "main": "main.js",
+  "author": "marcealban",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"No tests\"",
+    "build": "electron-builder -w portable"
+  },
+  "build": {
+    "appId": "com.scrcpy.launcher",
+    "productName": "ScrcpyLauncher",
+    "win": {
+      "target": "portable",
+      "icon": "Resources/icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.3"
+  }
+}

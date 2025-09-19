@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Simple Launcher</title>
+<style>
+  html, body {
+    margin: 0;
+    background: transparent;
+    -webkit-app-region: drag;
+  }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 8px;
+    width: 416px;
+    height: 600px;
+    overflow: hidden;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  #window {
+    -webkit-app-region: drag;
+    position: relative;
+    width: 400px;
+    height: 580px;
+    padding: 20px;
+    background: rgba(32, 32, 32, 0.95);
+    backdrop-filter: blur(20px);
+    color: #fff;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    transition: border-color 0.3s ease;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  #window:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+  
+  .window-controls {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+    z-index: 2;
+  }
+
+  .window-control {
+    cursor: pointer;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 16px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0;
+    line-height: 1;
+  }
+
+  .window-control:hover,
+  .window-control:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+  }
+
+  .window-control:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.35);
+    outline-offset: 2px;
+  }
+
+  #minimize {
+    font-size: 18px;
+    padding-bottom: 4px;
+  }
+  
+  button, input { 
+    -webkit-app-region: no-drag; 
+  }
+  
+  .top-btns { 
+    display: flex; 
+    gap: 10px; 
+    margin-top: 20px;
+    flex-shrink: 0;
+  }
+  
+  .top-btns button { 
+    flex: 1; 
+    padding: 8px 12px; 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    border-radius: 6px; 
+    background: rgba(255, 255, 255, 0.1); 
+    color: #fff; 
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  
+  .top-btns button:hover { 
+    background: rgba(255, 255, 255, 0.2); 
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+  }
+
+  .top-btns button:active {
+    transform: scale(0.98);
+  }
+
+  #connectBtn {
+    background: #0078d4;
+    border-color: #106ebe;
+  }
+
+  #connectBtn:hover {
+    background: #106ebe;
+  }
+
+  #status {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.8;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 16px;
+    flex-shrink: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+    white-space: pre-line;
+  }
+
+  #search {
+    width: 100%;
+    padding: 8px 12px 8px 35px;
+    border-radius: 6px; 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    background: rgba(255, 255, 255, 0.1); 
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s ease;
+    position: relative;
+    box-sizing: border-box;
+    flex-shrink: 0;
+  }
+
+  #search::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  #search:focus {
+    border-color: #0078d4;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2);
+  }
+
+  .search-container {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  
+  #lists { 
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    overflow-y: auto;
+    margin: 0;
+    min-height: 0;
+  }
+  
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin: 8px 0 8px 0;
+    padding: 8px 5px;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-app-region: no-drag;
+    transition: color 0.2s ease;
+  }
+
+  .section-header:hover {
+    color: rgba(255, 255, 255, 1);
+  }
+
+  button.section-header {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font: inherit;
+    width: 100%;
+    text-align: left;
+    padding: 8px 5px;
+  }
+
+  button.section-header:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .section-header.collapsible {
+    cursor: pointer;
+  }
+
+  .section-header.collapsible:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: 2px;
+  }
+
+  .section-header-icon {
+    font-size: 12px;
+    opacity: 0.7;
+    transition: transform 0.2s ease;
+  }
+
+  .section-header.collapsible.is-collapsed .section-header-icon {
+    transform: rotate(-90deg);
+  }
+
+  .section-header:first-child {
+    margin-top: 0;
+  }
+  
+  ul { 
+    list-style: none; 
+    padding: 0; 
+    margin: 0 0 15px 0;
+  }
+
+  ul:last-child {
+    margin-bottom: 0;
+  }
+  
+  .app-item {
+    border-radius: 6px;
+    display: flex;
+    align-items: stretch;
+    transition: background 0.2s ease;
+    -webkit-app-region: drag;
+  }
+
+  .app-item-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: inherit;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s ease;
+    -webkit-app-region: no-drag;
+  }
+
+  .app-item:hover .app-item-content,
+  .app-item-content:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .app-item-content::before {
+    content: '📱';
+    font-size: 16px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .app-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .loading-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: rgba(255, 255, 255, 0.9);
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  #invertBtn { 
+    padding: 4px 8px; 
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  #invertBtn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  #invertBtn:active {
+    transform: scale(0.95);
+  }
+
+  /* Scrollbar personalizado estilo Windows 11 */
+  #lists::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  #lists::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    margin: 2px;
+  }
+
+  #lists::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    border: 2px solid rgba(32, 32, 32, 0.95);
+    background-clip: content-box;
+  }
+
+  #lists::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+    background-clip: content-box;
+  }
+
+  #lists::-webkit-scrollbar-thumb:active {
+    background: rgba(255, 255, 255, 0.4);
+    background-clip: content-box;
+  }
+
+  /* Firefox scrollbar */
+  #lists {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
+  }
+
+  /* Animaciones */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  #window {
+    animation: fadeIn 0.3s ease-out;
+  }
+</style>
+</head>
+<body>
+<div id="window">
+  <div class="window-controls">
+    <button type="button" id="minimize" class="window-control" aria-label="Minimizar ventana">–</button>
+    <button type="button" id="close" class="window-control" aria-label="Cerrar ventana">✖</button>
+  </div>
+  
+  <div class="top-btns">
+    <button id="connectBtn">🔌 Conectar</button>
+  </div>
+  
+  <div id="status">Listo para conectar</div>
+  
+  <div class="search-container">
+    <div class="search-icon">🔍</div>
+    <input id="search" placeholder="Buscar aplicaciones..." />
+  </div>
+  
+  <div id="lists">
+    <div id="frequentSection">
+      <button type="button" class="section-header collapsible" id="frequentHeader" aria-expanded="true" aria-controls="frequentList">
+        <span>📊 Más usadas</span>
+        <span class="section-header-icon" aria-hidden="true">▾</span>
+      </button>
+      <ul id="frequentList"></ul>
+    </div>
+    <div class="section-header">📱 Todas las apps <button id="invertBtn">⇅</button></div>
+    <ul id="allList"></ul>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const closeBtn = document.getElementById('close');
+  const minimizeBtn = document.getElementById('minimize');
+  const connectBtn = document.getElementById('connectBtn');
+  const status = document.getElementById('status');
+  const search = document.getElementById('search');
+  const frequentSection = document.getElementById('frequentSection');
+  const frequentHeader = document.getElementById('frequentHeader');
+  const frequentList = document.getElementById('frequentList');
+  const allList = document.getElementById('allList');
+  const invertBtn = document.getElementById('invertBtn');
+  const windowElement = document.getElementById('window');
+
+  // Funciones de arrastre de ventana simplificadas
+  const DRAG_THRESHOLD = 2;
+  let isTrackingWindowDrag = false;
+  let dragInitiated = false;
+  let startDragScreenX = 0;
+  let startDragScreenY = 0;
+  let lastDragScreenX = 0;
+  let lastDragScreenY = 0;
+  let previousUserSelect = '';
+  let suppressNextClick = false;
+  let suppressClickTimeoutId = null;
+
+  const canMoveWindow = () => typeof launcher !== 'undefined' && typeof launcher.moveWindow === 'function';
+
+  function shouldSkipWindowDrag(target) {
+    if (!windowElement) return true;
+    const element = target instanceof Element ? target : target && target.parentElement;
+    if (!element) return true;
+    if (!windowElement.contains(element)) return true;
+    const exemptSelectors = 'button, input, textarea, select, a, .window-control';
+    if (element.closest(exemptSelectors)) return true;
+    return false;
+  }
+
+  const handleWindowDragMove = (event) => {
+    if (!isTrackingWindowDrag || !canMoveWindow()) {
+      stopWindowDrag();
+      return;
+    }
+
+    const deltaX = event.screenX - lastDragScreenX;
+    const deltaY = event.screenY - lastDragScreenY;
+
+    if (!dragInitiated) {
+      const totalDeltaX = event.screenX - startDragScreenX;
+      const totalDeltaY = event.screenY - startDragScreenY;
+      if (Math.abs(totalDeltaX) < DRAG_THRESHOLD && Math.abs(totalDeltaY) < DRAG_THRESHOLD) {
+        return;
+      }
+      dragInitiated = true;
+    }
+
+    if (deltaX === 0 && deltaY === 0) return;
+    lastDragScreenX = event.screenX;
+    lastDragScreenY = event.screenY;
+    launcher.moveWindow(deltaX, deltaY);
+  };
+
+  const stopWindowDrag = () => {
+    if (!isTrackingWindowDrag) return;
+    isTrackingWindowDrag = false;
+    window.removeEventListener('mousemove', handleWindowDragMove);
+    window.removeEventListener('mouseup', stopWindowDrag);
+    window.removeEventListener('blur', stopWindowDrag);
+    document.removeEventListener('mouseleave', stopWindowDrag);
+    if (document.body) {
+      document.body.style.userSelect = previousUserSelect;
+    }
+    previousUserSelect = '';
+    if (dragInitiated) {
+      if (suppressClickTimeoutId) {
+        clearTimeout(suppressClickTimeoutId);
+      }
+      suppressNextClick = true;
+      suppressClickTimeoutId = window.setTimeout(() => {
+        suppressNextClick = false;
+        suppressClickTimeoutId = null;
+      }, 120);
+    }
+    dragInitiated = false;
+  };
+
+  if (windowElement) {
+    windowElement.addEventListener('mousedown', (event) => {
+      if (event.button !== 0) return;
+      if (!canMoveWindow()) return;
+      if (shouldSkipWindowDrag(event.target)) return;
+      if (isTrackingWindowDrag) return;
+      
+      isTrackingWindowDrag = true;
+      dragInitiated = false;
+      startDragScreenX = event.screenX;
+      startDragScreenY = event.screenY;
+      lastDragScreenX = event.screenX;
+      lastDragScreenY = event.screenY;
+      previousUserSelect = document.body ? (document.body.style.userSelect || '') : '';
+      if (document.body) {
+        document.body.style.userSelect = 'none';
+      }
+      window.addEventListener('mousemove', handleWindowDragMove);
+      window.addEventListener('mouseup', stopWindowDrag);
+      window.addEventListener('blur', stopWindowDrag);
+      document.addEventListener('mouseleave', stopWindowDrag);
+      event.preventDefault();
+    });
+  }
+
+  // Variables para el estado de la aplicación
+  let allPackages = [];
+  let ascending = true;
+  let frequentCollapsed = false;
+
+  // Event listeners básicos
+  if (typeof launcher !== 'undefined') {
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener('click', () => launcher.minimize());
+    }
+    closeBtn.addEventListener('click', () => launcher.close());
+  }
+
+  if (frequentHeader) {
+    frequentHeader.addEventListener('click', () => {
+      frequentCollapsed = !frequentCollapsed;
+      updateFrequentSectionDisplay();
+    });
+  }
+
+  // Funciones de localStorage simplificadas
+  function loadCounts() {
+    try {
+      return JSON.parse(localStorage.getItem('appCounts') || '{}');
+    } catch {
+      return {};
+    }
+  }
+  
+  function saveCounts(c) {
+    localStorage.setItem('appCounts', JSON.stringify(c));
+  }
+
+  function updateFrequentSectionDisplay() {
+    const hasSearchTerm = Boolean(search.value && search.value.trim());
+    const hasFrequentItems = frequentList && frequentList.children.length > 0;
+    const shouldHideSection = hasSearchTerm || !hasFrequentItems;
+
+    if (frequentSection) {
+      frequentSection.style.display = shouldHideSection ? 'none' : '';
+    }
+    if (frequentHeader) {
+      const expanded = !shouldHideSection && !frequentCollapsed;
+      frequentHeader.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      frequentHeader.classList.toggle('is-collapsed', frequentCollapsed);
+      frequentHeader.disabled = shouldHideSection;
+    }
+    if (frequentList) {
+      if (shouldHideSection) {
+        frequentList.style.display = '';
+      } else {
+        frequentList.style.display = frequentCollapsed ? 'none' : '';
+      }
+    }
+  }
+
+  // Función para crear elementos de app
+  function createItem(app) {
+    const pkg = app.package;
+    const displayName = app.name || pkg;
+    const li = document.createElement('li');
+    li.className = 'app-item';
+    li.setAttribute('data-package', pkg);
+    li.dataset.search = `${displayName} ${pkg}`.toLowerCase();
+
+    const content = document.createElement('div');
+    content.className = 'app-item-content';
+    li.appendChild(content);
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'app-label';
+    nameSpan.textContent = displayName;
+    content.appendChild(nameSpan);
+
+    content.addEventListener('click', (event) => {
+      if (suppressNextClick) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      launchApp(pkg, displayName);
+    });
+
+    return li;
+  }
+
+  // Función para lanzar app
+  function launchApp(packageName, displayName) {
+    console.log('Launching app:', packageName);
+
+    const counts = loadCounts();
+    counts[packageName] = (counts[packageName] || 0) + 1;
+    saveCounts(counts);
+    renderLists(allPackages);
+
+    if (typeof launcher !== 'undefined' && typeof launcher.launchApp === 'function') {
+      launcher.launchApp(packageName);
+    }
+
+    status.textContent = `Abriendo ${displayName || packageName}...`;
+  }
+
+  // Función para renderizar listas
+  function renderLists(pkgs) {
+    const counts = loadCounts();
+
+    // Apps frecuentes
+    const frequent = pkgs
+      .filter(app => counts[app.package])
+      .sort((a, b) => (counts[b.package] || 0) - (counts[a.package] || 0))
+      .slice(0, 5);
+
+    frequentList.innerHTML = '';
+    frequent.forEach(app => {
+      frequentList.appendChild(createItem(app));
+    });
+
+    // Todas las apps
+    const sorted = [...pkgs].sort((a, b) => {
+      const nameA = (a.name || a.package || '').toLowerCase();
+      const nameB = (b.name || b.package || '').toLowerCase();
+      return ascending ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+    });
+
+    allList.innerHTML = '';
+    sorted.forEach(app => {
+      allList.appendChild(createItem(app));
+    });
+
+    applySearchFilter();
+  }
+
+  function applySearchFilter() {
+    const term = (search.value || '').trim().toLowerCase();
+    const items = allList.querySelectorAll('li');
+    items.forEach(item => {
+      const text = item.dataset.search || item.textContent.toLowerCase();
+      item.style.display = term ? (text.includes(term) ? 'flex' : 'none') : 'flex';
+    });
+    updateFrequentSectionDisplay();
+  }
+
+  // Event listeners para búsqueda e inversión
+  invertBtn.addEventListener('click', () => {
+    ascending = !ascending;
+    renderLists(allPackages);
+  });
+
+  search.addEventListener('input', applySearchFilter);
+
+  // Función de conexión simplificada
+  async function attemptConnect() {
+    status.textContent = 'Conectando...';
+
+    if (typeof launcher !== 'undefined' && typeof launcher.connect === 'function') {
+      try {
+        const result = await launcher.connect();
+        status.textContent = 'Conectado exitosamente';
+        
+        // Si hay un método para obtener paquetes, úsalo
+        if (typeof launcher.listPackages === 'function') {
+          const packages = await launcher.listPackages();
+          allPackages = packages.map(app => ({ ...app, processing: false }));
+          renderLists(allPackages);
+        }
+      } catch (error) {
+        const message = error && typeof error.message === 'string' ? error.message : String(error);
+        status.textContent = `Error: ${message}`;
+      }
+    } else {
+      // Modo demo con apps de ejemplo
+      status.textContent = 'Conectado (modo demo)';
+      allPackages = [
+        { package: 'com.example.app1', name: 'App Demo 1' },
+        { package: 'com.example.app2', name: 'App Demo 2' },
+        { package: 'com.example.app3', name: 'App Demo 3' },
+        { package: 'com.example.app4', name: 'App Demo 4' },
+        { package: 'com.example.app5', name: 'App Demo 5' },
+        { package: 'com.example.app6', name: 'App Demo 6' },
+        { package: 'com.example.app7', name: 'App Demo 7' },
+        { package: 'com.example.app8', name: 'App Demo 8' }
+      ];
+      renderLists(allPackages);
+    }
+  }
+
+  connectBtn.addEventListener('click', attemptConnect);
+
+  // Inicialización
+  allPackages = [];
+  updateFrequentSectionDisplay();
+});
+</script>
+</body>
+</html>
