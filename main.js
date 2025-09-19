@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
+const AdmZip = require('adm-zip');
+const { pathToFileURL } = require('url');
 
 const WINDOW_WIDTH = 416;
 const WINDOW_HEIGHT = 600;
@@ -12,14 +14,28 @@ const labelQueue = [];
 const queuedLabelPackages = new Set();
 let isProcessingLabelQueue = false;
 
+const iconQueue = [];
+const queuedIconPackages = new Set();
+let isProcessingIconQueue = false;
+
 const base = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
+const ICON_CACHE_DIR = path.join(base, 'IconCache');
+const TEMP_ICON_BASE_DIR = path.join(base, '__tmp_icons');
+const LOG_FILE_PATH = path.join(base, 'command.log');
 const adb = process.platform === 'win32' ? `"${path.join(base, 'adb.exe')}"` : 'adb';
 let cachedAapt2Command = null;
+const zipInstanceCache = new Map();
 
 let mainWindow = null;
 let currentDevice = '';
 let PREF_PATH = null;
 let appLabelCache = null;
+const packageApkPathCache = new Map();
+const apkEntriesCache = new Map();
+const resourceTableCache = new Map();
+const packageIconCache = new Map();
+
+resetIconLog();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -52,9 +68,65 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
-function run(command) {
+function ensureDirectory(targetPath) {
+  if (!targetPath) return;
+  try {
+    fs.mkdirSync(targetPath, { recursive: true });
+  } catch (error) {
+    console.warn(`No se pudo crear el directorio ${targetPath}:`, error.message);
+  }
+}
+
+function appendToLog(content) {
+  if (!LOG_FILE_PATH) return;
+  try {
+    ensureDirectory(path.dirname(LOG_FILE_PATH));
+    fs.appendFileSync(LOG_FILE_PATH, content, { encoding: 'utf8' });
+  } catch (error) {
+    console.warn('No se pudo escribir en el archivo de log:', error.message);
+  }
+}
+
+function resetIconLog() {
+  if (!LOG_FILE_PATH) return;
+  try {
+    ensureDirectory(path.dirname(LOG_FILE_PATH));
+    fs.writeFileSync(LOG_FILE_PATH, '', { encoding: 'utf8' });
+  } catch (error) {
+    console.warn('No se pudo limpiar el archivo de log:', error.message);
+  }
+}
+
+function logCommand(command, stdout, stderr) {
+  if (command) {
+    appendToLog(command.endsWith('\n') ? command : `${command}\n`);
+  }
+  if (stdout) {
+    const output = typeof stdout === 'string' ? stdout : stdout.toString('utf8');
+    if (output) {
+      appendToLog(output.endsWith('\n') ? output : `${output}\n`);
+    }
+  }
+  if (stderr) {
+    const errorOutput = typeof stderr === 'string' ? stderr : stderr.toString('utf8');
+    if (errorOutput) {
+      appendToLog(errorOutput.endsWith('\n') ? errorOutput : `${errorOutput}\n`);
+    }
+  }
+}
+
+function run(command, options = {}) {
   return new Promise((resolve, reject) => {
-    exec(command, { cwd: base, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    const { logCategory = null, ...rest } = options || {};
+    const execOptions = { cwd: base, windowsHide: true, maxBuffer: 1024 * 1024, ...rest };
+    exec(command, execOptions, (error, stdout, stderr) => {
+      try {
+        if (logCategory === 'icon') {
+          logCommand(command, stdout, stderr);
+        }
+      } catch {
+        // ignore logging errors
+      }
       if (error) {
         const message = stderr && stderr.trim() ? stderr.trim() : error.message;
         reject(new Error(message));
@@ -94,6 +166,362 @@ function buildAdbCommand(args, deviceOverride) {
   return `${adb}${deviceSegment} ${args}`;
 }
 
+function normalizeRemotePath(rawPath) {
+  if (!rawPath) return '';
+  const trimmed = rawPath.trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('package:') ? trimmed.slice('package:'.length).trim() : trimmed;
+}
+
+function parseResourceValue(rawValue) {
+  if (!rawValue) return null;
+  const value = rawValue.trim();
+  if (!value) return null;
+
+  if (value.startsWith('@')) {
+    const withoutAt = value.slice(1);
+    if (/^0x[0-9a-f]+$/i.test(withoutAt)) {
+      return { raw: value, resourceId: withoutAt.toLowerCase() };
+    }
+    const androidPrefixMatch = withoutAt.match(/^android:([\w\.]+)/i);
+    if (androidPrefixMatch) {
+      const remainder = withoutAt.replace(/^android:/i, '');
+      const segments = remainder.split('/');
+      if (segments.length === 2) {
+        return { raw: value, type: segments[0], name: segments[1], android: true };
+      }
+    }
+    const segments = withoutAt.split('/');
+    if (segments.length === 2) {
+      return { raw: value, type: segments[0], name: segments[1] };
+    }
+    return { raw: value };
+  }
+
+  return { raw: value, path: value };
+}
+
+async function fetchPackageApkPaths(pkg, options = {}) {
+  const sanitized = typeof pkg === 'string' ? pkg.trim() : '';
+  if (!sanitized) return [];
+
+  const { logCategory = null, forceRefresh = false } = options || {};
+
+  if (!forceRefresh && packageApkPathCache.has(sanitized)) {
+    return packageApkPathCache.get(sanitized);
+  }
+
+  const command = buildAdbCommand(`shell pm path ${sanitized}`);
+  let output = '';
+  try {
+    output = await run(command, { logCategory });
+  } catch (error) {
+    console.warn(`No se pudieron obtener los APK de ${sanitized}:`, error.message);
+    packageApkPathCache.set(sanitized, []);
+    return [];
+  }
+
+  const paths = output
+    .split(/\r?\n/)
+    .map(line => normalizeRemotePath(line))
+    .filter(Boolean);
+
+  const unique = Array.from(new Set(paths));
+  packageApkPathCache.set(sanitized, unique);
+  return unique;
+}
+
+async function pullPackageApks(pkg, remotePaths, options = {}) {
+  const sanitized = typeof pkg === 'string' ? pkg.trim() : '';
+  if (!sanitized) return null;
+
+  const paths = Array.isArray(remotePaths) && remotePaths.length
+    ? remotePaths
+    : await fetchPackageApkPaths(sanitized, options);
+
+  if (!paths.length) {
+    return null;
+  }
+
+  ensureDirectory(TEMP_ICON_BASE_DIR);
+  const tempDir = path.join(TEMP_ICON_BASE_DIR, sanitized.replace(/[^\w\.\-]+/g, '_'));
+
+  try {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup errors
+  }
+
+  ensureDirectory(tempDir);
+
+  const pulled = [];
+  const { logCategory = null } = options || {};
+  for (let index = 0; index < paths.length; index += 1) {
+    const remotePath = normalizeRemotePath(paths[index]);
+    if (!remotePath) continue;
+    const remoteBase = path.basename(remotePath);
+    let fileName = remoteBase || `split_${index}.apk`;
+    if (/base\.apk$/i.test(remoteBase)) {
+      fileName = 'base.apk';
+    }
+    if (pulled.some(item => item.fileName === fileName)) {
+      fileName = `${index}_${fileName}`;
+    }
+    const localPath = path.join(tempDir, fileName);
+    await run(buildAdbCommand(`pull "${remotePath}" "${localPath}"`), { logCategory });
+    pulled.push({ remotePath, localPath, fileName });
+  }
+
+  if (!pulled.length) {
+    return null;
+  }
+
+  pulled.sort((a, b) => {
+    const aBase = a.fileName === 'base.apk' ? 0 : 1;
+    const bBase = b.fileName === 'base.apk' ? 0 : 1;
+    return aBase - bBase;
+  });
+
+  const baseApkEntry = pulled.find(item => item.fileName === 'base.apk')
+    || pulled.find(item => /base\.apk$/i.test(item.remotePath))
+    || pulled[0];
+
+  return {
+    tempDir,
+    apks: pulled,
+    baseApk: baseApkEntry ? baseApkEntry.localPath : null
+  };
+}
+
+function getZipInstance(apkPath) {
+  if (!apkPath) return null;
+
+  if (zipInstanceCache.has(apkPath)) {
+    return zipInstanceCache.get(apkPath);
+  }
+
+  try {
+    const instance = new AdmZip(apkPath);
+    zipInstanceCache.set(apkPath, instance);
+    return instance;
+  } catch (error) {
+    console.warn(`No se pudo abrir el APK ${apkPath}:`, error.message);
+    zipInstanceCache.set(apkPath, null);
+    return null;
+  }
+}
+
+async function getApkEntries(apkPath) {
+  if (!apkPath) return [];
+
+  if (apkEntriesCache.has(apkPath)) {
+    return apkEntriesCache.get(apkPath);
+  }
+
+  const zip = getZipInstance(apkPath);
+  if (!zip) {
+    apkEntriesCache.set(apkPath, []);
+    return [];
+  }
+
+  const entries = zip
+    .getEntries()
+    .map(entry => entry && typeof entry.entryName === 'string' ? entry.entryName : '')
+    .map(name => name.trim())
+    .filter(Boolean);
+  apkEntriesCache.set(apkPath, entries);
+  return entries;
+}
+
+function getFormatFromEntry(entryPath) {
+  if (!entryPath) return '';
+  const lower = entryPath.toLowerCase();
+  if (lower.endsWith('.png')) return 'png';
+  if (lower.endsWith('.webp')) return 'webp';
+  if (lower.endsWith('.jpg')) return 'jpg';
+  if (lower.endsWith('.jpeg')) return 'jpeg';
+  if (lower.endsWith('.xml.flat')) return 'xml.flat';
+  if (lower.endsWith('.xml')) return 'xml';
+  if (lower.endsWith('.svg')) return 'svg';
+  return '';
+}
+
+function findResourceEntry(entries, resource, preferredExtensions) {
+  if (!Array.isArray(entries) || !entries.length || !resource) return null;
+
+  const extensions = Array.isArray(preferredExtensions) && preferredExtensions.length
+    ? preferredExtensions
+    : ['.png', '.webp', '.xml', '.xml.flat', '.jpg', '.jpeg'];
+
+  if (resource.path) {
+    const normalized = resource.path.replace(/^\/+/, '');
+    if (entries.includes(normalized)) {
+      return normalized;
+    }
+    const baseName = path.basename(normalized);
+    const match = entries.find(entry => entry.endsWith(`/${baseName}`));
+    if (match) {
+      return match;
+    }
+  }
+
+  const type = resource.type;
+  const name = resource.name;
+  if (type && name) {
+    const baseName = name.replace(/^@/, '');
+    const prefixes = [`res/${type}-`, `res/${type}/`];
+    for (const ext of extensions) {
+      for (const prefix of prefixes) {
+        const match = entries.find(entry => entry.startsWith(prefix) && entry.endsWith(`${baseName}${ext}`));
+        if (match) {
+          return match;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+async function resolveResourceReference(resource, apks, preferredExtensions, options = {}) {
+  if (!resource) return null;
+
+  let working = { ...resource };
+  if (working.resourceId && !working.type && !working.name) {
+    const resolved = await resolveResourceId(working.resourceId, apks, options);
+    if (resolved) {
+      working = { ...working, ...resolved };
+    }
+  }
+
+  if (working.android) {
+    return null;
+  }
+
+  for (const apk of apks) {
+    const entries = await getApkEntries(apk.localPath);
+    const match = findResourceEntry(entries, working, preferredExtensions);
+    if (match) {
+      return {
+        apkPath: apk.localPath,
+        entryPath: match,
+        format: getFormatFromEntry(match)
+      };
+    }
+  }
+
+  return null;
+}
+
+async function extractEntryToTemp(apkPath, entryPath, tempDir) {
+  const zip = getZipInstance(apkPath);
+  if (!zip) {
+    throw new Error('No se pudo acceder al APK para extraer recursos');
+  }
+
+  const normalizedEntry = (entryPath || '').replace(/^\/+/, '');
+  if (!normalizedEntry || normalizedEntry.includes('../') || normalizedEntry.includes('..\\')) {
+    throw new Error('Entrada de recurso inválida');
+  }
+  const entry = zip.getEntry(normalizedEntry);
+  if (!entry) {
+    throw new Error(`No se encontró la entrada ${normalizedEntry} dentro del APK`);
+  }
+
+  const extractionRoot = path.join(tempDir, '__extract');
+  ensureDirectory(extractionRoot);
+  const destination = path.join(extractionRoot, normalizedEntry);
+  ensureDirectory(path.dirname(destination));
+  await fs.promises.writeFile(destination, entry.getData());
+  return destination;
+}
+
+async function copyFileSafe(source, destination) {
+  ensureDirectory(path.dirname(destination));
+  await fs.promises.copyFile(source, destination);
+  return destination;
+}
+
+function extractDrawableFromXml(xmlContent, tagName) {
+  if (!xmlContent || !tagName) return null;
+  const selfClosingPattern = new RegExp(`<${tagName}[^>]*?>`, 'i');
+  const blockPattern = new RegExp(`<${tagName}[^>]*?>[\s\S]*?<\/${tagName}>`, 'i');
+  const combined = xmlContent.match(selfClosingPattern) || xmlContent.match(blockPattern);
+  if (!combined) return null;
+  const segment = combined[0];
+  const attrMatch = segment.match(/android:(?:drawable|src)="([^"]+)"/i)
+    || segment.match(/android:(?:drawable|src)='([^']+)'/i);
+  if (attrMatch) {
+    return attrMatch[1];
+  }
+  return null;
+}
+
+async function convertVectorDrawableToSvg(vectorXmlPath, destinationPath, options = {}) {
+  ensureDirectory(path.dirname(destinationPath));
+  const { logCategory = null } = options || {};
+  await run(`npx --yes vector-drawable-svg "${vectorXmlPath}" "${destinationPath}"`, { logCategory });
+  await fs.promises.access(destinationPath, fs.constants.F_OK);
+  const stats = await fs.promises.stat(destinationPath);
+  if (!stats || !stats.size) {
+    throw new Error('El SVG generado está vacío');
+  }
+  return destinationPath;
+}
+
+async function getResourceTable(apkPath, options = {}) {
+  if (!apkPath) return new Map();
+
+  if (resourceTableCache.has(apkPath)) {
+    return resourceTableCache.get(apkPath);
+  }
+
+  const aapt2 = getAapt2Command();
+  if (!aapt2) {
+    resourceTableCache.set(apkPath, new Map());
+    return resourceTableCache.get(apkPath);
+  }
+
+  try {
+    const { logCategory = null } = options || {};
+    const output = await run(`${aapt2} dump resources "${apkPath}"`, { logCategory });
+    const table = new Map();
+    output.split(/\r?\n/).forEach(line => {
+      const match = line.match(/resource\s+0x([0-9a-f]+)\s+([^\s:]+)\s*:/i);
+      if (!match) return;
+      const id = match[1].toLowerCase();
+      const typeAndName = match[2];
+      const segments = typeAndName.split('/');
+      if (segments.length !== 2) return;
+      const [type, name] = segments;
+      if (!type || !name) return;
+      table.set(id, { type, name });
+    });
+    resourceTableCache.set(apkPath, table);
+    return table;
+  } catch (error) {
+    console.warn(`No se pudo obtener la tabla de recursos de ${apkPath}:`, error.message);
+    const empty = new Map();
+    resourceTableCache.set(apkPath, empty);
+    return empty;
+  }
+}
+
+async function resolveResourceId(resourceId, apks, options = {}) {
+  if (!resourceId) return null;
+  const normalized = resourceId.replace(/^@/, '').toLowerCase();
+  if (!normalized) return null;
+
+  for (const apk of apks) {
+    const table = await getResourceTable(apk.localPath, options);
+    if (table.has(normalized)) {
+      return table.get(normalized);
+    }
+  }
+
+  return null;
+}
+
 function readPrefs() {
   if (!PREF_PATH) return {};
   try {
@@ -107,7 +535,7 @@ function readPrefs() {
 function writePrefs(prefs) {
   if (!PREF_PATH) return;
   try {
-    fs.mkdirSync(path.dirname(PREF_PATH), { recursive: true });
+    ensureDirectory(path.dirname(PREF_PATH));
     fs.writeFileSync(PREF_PATH, JSON.stringify(prefs, null, 2), 'utf8');
   } catch (error) {
     console.error('No se pudieron guardar las preferencias:', error);
@@ -131,6 +559,55 @@ function rememberAppLabel(pkg, label) {
   const prefs = readPrefs();
   prefs[LABEL_CACHE_KEY] = cache;
   writePrefs(prefs);
+}
+
+function getCachedIconPath(pkg) {
+  if (!pkg) return null;
+  if (packageIconCache.has(pkg)) {
+    return packageIconCache.get(pkg);
+  }
+  const candidates = ['.svg', '.png', '.webp', '.jpg', '.jpeg']
+    .map(ext => path.join(ICON_CACHE_DIR, `${pkg}${ext}`));
+  const existing = candidates.find(candidate => {
+    try {
+      return fs.existsSync(candidate);
+    } catch {
+      return false;
+    }
+  });
+  if (existing) {
+    packageIconCache.set(pkg, existing);
+    return existing;
+  }
+  return null;
+}
+
+function iconPathToUrl(iconPath) {
+  if (!iconPath) return '';
+  try {
+    return pathToFileURL(iconPath).href;
+  } catch {
+    return '';
+  }
+}
+
+async function clearCachedIconFiles(pkg, keepPath) {
+  const sanitized = typeof pkg === 'string' ? pkg.trim() : '';
+  if (!sanitized) return;
+  const keepNormalized = keepPath ? path.normalize(keepPath) : null;
+  const candidates = ['.svg', '.png', '.webp', '.jpg', '.jpeg']
+    .map(ext => path.join(ICON_CACHE_DIR, `${sanitized}${ext}`));
+  for (const candidate of candidates) {
+    const normalizedCandidate = path.normalize(candidate);
+    if (keepNormalized && normalizedCandidate === keepNormalized) {
+      continue;
+    }
+    try {
+      await fs.promises.rm(candidate, { force: true });
+    } catch {
+      // ignore deletion errors
+    }
+  }
 }
 
 function emitToRenderer(channel, payload) {
@@ -194,6 +671,68 @@ async function processLabelQueue() {
   }
 }
 
+function queueAppIcons(packages = []) {
+  packages.forEach(pkg => {
+    const normalized = typeof pkg === 'string' ? pkg.trim() : '';
+    if (!normalized) return;
+    if (getCachedIconPath(normalized)) return;
+    if (queuedIconPackages.has(normalized)) return;
+    queuedIconPackages.add(normalized);
+    iconQueue.push(normalized);
+  });
+  void processIconQueue();
+}
+
+async function processIconQueue() {
+  if (isProcessingIconQueue) return;
+  isProcessingIconQueue = true;
+  try {
+    while (iconQueue.length) {
+      const pkg = iconQueue.shift();
+      if (pkg) {
+        queuedIconPackages.delete(pkg);
+      }
+      if (!pkg) continue;
+
+      const cached = getCachedIconPath(pkg);
+      if (cached) {
+        emitToRenderer('package-icon-updated', {
+          package: pkg,
+          iconPath: iconPathToUrl(cached),
+          success: true
+        });
+        continue;
+      }
+
+      emitToRenderer('package-icon-started', pkg);
+
+      let iconPath = null;
+      try {
+        iconPath = await extractIconForPackage(pkg);
+      } catch (error) {
+        console.warn(`No se pudo extraer el icono para ${pkg}:`, error.message);
+      }
+
+      if (iconPath) {
+        const finalPath = getCachedIconPath(pkg) || iconPath;
+        emitToRenderer('package-icon-updated', {
+          package: pkg,
+          iconPath: iconPathToUrl(finalPath),
+          success: true
+        });
+      } else {
+        emitToRenderer('package-icon-updated', {
+          package: pkg,
+          iconPath: '',
+          success: false
+        });
+      }
+    }
+  } finally {
+    isProcessingIconQueue = false;
+  }
+}
+
 function parseLabelFromDump(output) {
   if (!output) return null;
   const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -204,6 +743,37 @@ function parseLabelFromDump(output) {
   const match = target.match(/:'((?:\\'|[^'])*)'/);
   if (!match) return null;
   return match[1].replace(/\\'/g, "'");
+}
+
+function parseApplicationIconLines(output) {
+  if (!output) return [];
+  const lines = output.split(/\r?\n/);
+  const icons = [];
+  lines.forEach(line => {
+    const match = line.match(/^application-icon-(\d+):'(.*)'$/);
+    if (!match) return;
+    const density = Number.parseInt(match[1], 10);
+    const value = match[2];
+    if (!Number.isNaN(density) && value) {
+      icons.push({ density, value });
+    }
+  });
+  return icons;
+}
+
+function selectBestApplicationIcon(icons) {
+  if (!Array.isArray(icons) || !icons.length) return null;
+  let best = icons[0];
+  let bestScore = best.density === 65535 ? Number.MAX_SAFE_INTEGER : best.density;
+  for (let index = 1; index < icons.length; index += 1) {
+    const icon = icons[index];
+    const score = icon.density === 65535 ? Number.MAX_SAFE_INTEGER : icon.density;
+    if (score > bestScore) {
+      best = icon;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 function getAapt2Command() {
@@ -231,19 +801,8 @@ async function extractLabelForPackage(pkg) {
 
   const tempApkPath = path.join(base, TEMP_APK_NAME);
   try {
-    const pathOutput = await run(buildAdbCommand(`shell pm path ${sanitized}`));
-    const remoteLine = pathOutput
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(Boolean)
-      .find(line => line.includes('base.apk')) ||
-      pathOutput.split(/\r?\n/).map(line => line.trim()).filter(Boolean)[0];
-
-    if (!remoteLine) return null;
-
-    const remotePath = remoteLine.startsWith('package:')
-      ? remoteLine.slice('package:'.length).trim()
-      : remoteLine;
+    const remotePaths = await fetchPackageApkPaths(sanitized);
+    const remotePath = remotePaths.find(entry => /base\.apk$/i.test(entry)) || remotePaths[0];
     if (!remotePath) return null;
 
     try {
@@ -281,6 +840,148 @@ async function extractLabelForPackage(pkg) {
   }
 }
 
+async function extractIconForPackage(pkg) {
+  const sanitized = typeof pkg === 'string' ? pkg.trim() : '';
+  if (!sanitized) return null;
+
+  const aapt2 = getAapt2Command();
+  if (!aapt2) {
+    throw new Error('aapt2 no está disponible');
+  }
+
+  const logOptions = { logCategory: 'icon' };
+  const remotePaths = await fetchPackageApkPaths(sanitized, { ...logOptions, forceRefresh: true });
+  const pulled = await pullPackageApks(sanitized, remotePaths, logOptions);
+  if (!pulled || !pulled.apks || !pulled.apks.length) {
+    throw new Error('No se pudieron descargar los APK de la aplicación');
+  }
+
+  const { tempDir, apks, baseApk } = pulled;
+  if (!baseApk) {
+    throw new Error('No se encontró el APK base');
+  }
+
+  ensureDirectory(ICON_CACHE_DIR);
+
+  const cleanup = async () => {
+    try {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+    if (Array.isArray(apks)) {
+      apks.forEach(entry => {
+        const localPath = entry && typeof entry.localPath === 'string' ? entry.localPath : '';
+        if (!localPath) return;
+        apkEntriesCache.delete(localPath);
+        zipInstanceCache.delete(localPath);
+        resourceTableCache.delete(localPath);
+      });
+    }
+  };
+
+  try {
+    const badging = await run(`${aapt2} dump badging "${baseApk}"`, logOptions);
+    const iconEntries = parseApplicationIconLines(badging);
+    const bestIcon = selectBestApplicationIcon(iconEntries);
+    if (!bestIcon) {
+      throw new Error('No se encontró referencia al icono en el APK');
+    }
+
+    const iconResource = parseResourceValue(bestIcon.value);
+    if (!iconResource) {
+      throw new Error('No se pudo interpretar la referencia al icono');
+    }
+
+    const preferredExt = iconResource.path && iconResource.path.toLowerCase().endsWith('.png')
+      ? ['.png']
+      : ['.png', '.webp', '.xml', '.xml.flat'];
+
+    let resolvedIcon = await resolveResourceReference(iconResource, apks, preferredExt, logOptions);
+    if (!resolvedIcon && iconResource.path) {
+      resolvedIcon = await resolveResourceReference(iconResource, apks, ['.xml', '.xml.flat', '.png', '.webp'], logOptions);
+    }
+
+    if (!resolvedIcon) {
+      throw new Error('No se pudo localizar el recurso físico del icono');
+    }
+
+    const finalBaseName = `${sanitized}`;
+
+    if (['png', 'webp', 'jpg', 'jpeg'].includes(resolvedIcon.format)) {
+      const extension = resolvedIcon.format;
+      const destination = path.join(ICON_CACHE_DIR, `${finalBaseName}.${extension}`);
+      const extracted = await extractEntryToTemp(resolvedIcon.apkPath, resolvedIcon.entryPath, tempDir);
+      await clearCachedIconFiles(sanitized, destination);
+      await copyFileSafe(extracted, destination);
+      packageIconCache.set(sanitized, destination);
+      return destination;
+    }
+
+    const adaptiveExtracted = await extractEntryToTemp(resolvedIcon.apkPath, resolvedIcon.entryPath, tempDir);
+    let adaptiveXmlPath = adaptiveExtracted;
+    if (resolvedIcon.format === 'xml.flat') {
+      adaptiveXmlPath = path.join(tempDir, 'adaptive_icon.xml');
+      await run(`${aapt2} convert --output-format xml --output "${adaptiveXmlPath}" "${adaptiveExtracted}"`, logOptions);
+    }
+
+    let adaptiveContent = '';
+    try {
+      adaptiveContent = await fs.promises.readFile(adaptiveXmlPath, 'utf8');
+    } catch (error) {
+      throw new Error('No se pudo leer el XML del icono adaptativo');
+    }
+
+    if (adaptiveContent.includes('<vector')) {
+      const svgDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.svg`);
+      await clearCachedIconFiles(sanitized, svgDestination);
+      await convertVectorDrawableToSvg(adaptiveXmlPath, svgDestination, logOptions);
+      packageIconCache.set(sanitized, svgDestination);
+      return svgDestination;
+    }
+
+    const foregroundRef = extractDrawableFromXml(adaptiveContent, 'foreground');
+    if (!foregroundRef) {
+      throw new Error('No se encontró el foreground del icono adaptativo');
+    }
+
+    const foregroundResource = parseResourceValue(foregroundRef);
+    if (!foregroundResource) {
+      throw new Error('Referencia al foreground inválida');
+    }
+
+    const resolvedForeground = await resolveResourceReference(foregroundResource, apks, ['.png', '.webp', '.xml', '.xml.flat'], logOptions);
+    if (!resolvedForeground) {
+      throw new Error('No se pudo resolver el foreground del icono');
+    }
+
+    if (['png', 'webp', 'jpg', 'jpeg'].includes(resolvedForeground.format)) {
+      const extension = resolvedForeground.format;
+      const destination = path.join(ICON_CACHE_DIR, `${finalBaseName}.${extension}`);
+      const extracted = await extractEntryToTemp(resolvedForeground.apkPath, resolvedForeground.entryPath, tempDir);
+      await clearCachedIconFiles(sanitized, destination);
+      await copyFileSafe(extracted, destination);
+      packageIconCache.set(sanitized, destination);
+      return destination;
+    }
+
+    const vectorExtracted = await extractEntryToTemp(resolvedForeground.apkPath, resolvedForeground.entryPath, tempDir);
+    let vectorXmlPath = vectorExtracted;
+    if (resolvedForeground.format === 'xml.flat') {
+      vectorXmlPath = path.join(tempDir, 'foreground_vector.xml');
+      await run(`${aapt2} convert --output-format xml --output "${vectorXmlPath}" "${vectorExtracted}"`, logOptions);
+    }
+
+    const svgDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.svg`);
+    await clearCachedIconFiles(sanitized, svgDestination);
+    await convertVectorDrawableToSvg(vectorXmlPath, svgDestination, logOptions);
+    packageIconCache.set(sanitized, svgDestination);
+    return svgDestination;
+  } finally {
+    await cleanup();
+  }
+}
+
 async function listLaunchablePackages() {
   if (!currentDevice) {
     throw new Error('No hay un dispositivo conectado.');
@@ -306,8 +1007,14 @@ async function listLaunchablePackages() {
 
   const cache = getAppLabelCache();
   const missing = [];
+  const missingIcons = [];
   const result = packages.map(pkg => {
     const cachedLabel = cache[pkg];
+    const iconPath = getCachedIconPath(pkg);
+    const iconResolved = Boolean(iconPath);
+    if (!iconResolved) {
+      missingIcons.push(pkg);
+    }
     if (!cachedLabel) {
       missing.push(pkg);
     }
@@ -315,12 +1022,18 @@ async function listLaunchablePackages() {
       package: pkg,
       name: cachedLabel || pkg,
       hasLabel: Boolean(cachedLabel),
-      labelResolved: Boolean(cachedLabel)
+      labelResolved: Boolean(cachedLabel),
+      iconResolved,
+      iconPath: iconResolved ? iconPathToUrl(iconPath) : ''
     };
   });
 
   if (missing.length) {
     queueAppLabels(missing);
+  }
+
+  if (missingIcons.length) {
+    queueAppIcons(missingIcons);
   }
 
   return result;
@@ -387,6 +1100,8 @@ ipcMain.handle('launch-app', async (_event, pkg) => {
 
 app.whenReady().then(() => {
   PREF_PATH = path.join(app.getPath('userData'), 'preferences.json');
+  ensureDirectory(ICON_CACHE_DIR);
+  ensureDirectory(TEMP_ICON_BASE_DIR);
   createWindow();
 
   app.on('activate', () => {
