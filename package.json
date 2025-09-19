@@ -1,0 +1,14 @@
+{
+  "name": "adb-dummy-app",
+  "version": "1.0.0",
+  "description": "Portable Electron dummy app to connect to a single ADB device and list installed launchable packages.",
+  "main": "main.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^28.3.1"
+  }
+}

@@ -612,20 +612,20 @@ window.addEventListener('DOMContentLoaded', () => {
     nameSpan.textContent = displayName;
     content.appendChild(nameSpan);
 
-    content.addEventListener('click', (event) => {
+    content.addEventListener('click', async (event) => {
       if (suppressNextClick) {
         event.preventDefault();
         event.stopPropagation();
         return;
       }
-      launchApp(pkg, displayName);
+      await launchApp(pkg, displayName);
     });
 
     return li;
   }
 
   // Función para lanzar app
-  function launchApp(packageName, displayName) {
+  async function launchApp(packageName, displayName) {
     console.log('Launching app:', packageName);
 
     const counts = loadCounts();
@@ -633,11 +633,21 @@ window.addEventListener('DOMContentLoaded', () => {
     saveCounts(counts);
     renderLists(allPackages);
 
-    if (typeof launcher !== 'undefined' && typeof launcher.launchApp === 'function') {
-      launcher.launchApp(packageName);
-    }
+    const label = displayName || packageName;
 
-    status.textContent = `Abriendo ${displayName || packageName}...`;
+    if (typeof launcher !== 'undefined' && typeof launcher.launchApp === 'function') {
+      try {
+        status.textContent = `Abriendo ${label}...`;
+        await launcher.launchApp(packageName);
+        status.textContent = `Comando enviado a ${label}.`;
+      } catch (error) {
+        const message = error && typeof error.message === 'string' ? error.message : String(error);
+        status.textContent = `Error al abrir ${label}: ${message}`;
+        console.error('Error launching app:', error);
+      }
+    } else {
+      status.textContent = `Abriendo ${label} (demo)...`;
+    }
   }
 
   // Función para renderizar listas
@@ -691,36 +701,45 @@ window.addEventListener('DOMContentLoaded', () => {
   // Función de conexión simplificada
   async function attemptConnect() {
     status.textContent = 'Conectando...';
+    connectBtn.disabled = true;
 
-    if (typeof launcher !== 'undefined' && typeof launcher.connect === 'function') {
-      try {
+    const hasNativeLauncher = typeof launcher !== 'undefined' && typeof launcher.connect === 'function';
+
+    try {
+      if (hasNativeLauncher) {
         const result = await launcher.connect();
-        status.textContent = 'Conectado exitosamente';
-        
-        // Si hay un método para obtener paquetes, úsalo
+        const deviceId = result && result.device && result.device.id ? result.device.id : '';
+        const deviceLabel = deviceId ? `Dispositivo ${deviceId}` : 'Dispositivo';
+        status.textContent = `${deviceLabel} conectado. Obteniendo aplicaciones...`;
+
         if (typeof launcher.listPackages === 'function') {
           const packages = await launcher.listPackages();
           allPackages = packages.map(app => ({ ...app, processing: false }));
           renderLists(allPackages);
+          status.textContent = `${deviceLabel} conectado. ${packages.length} aplicaciones disponibles.`;
+        } else {
+          status.textContent = `${deviceLabel} conectado.`;
         }
-      } catch (error) {
-        const message = error && typeof error.message === 'string' ? error.message : String(error);
-        status.textContent = `Error: ${message}`;
+      } else {
+        status.textContent = 'Conectado (modo demo)';
+        allPackages = [
+          { package: 'com.example.app1', name: 'App Demo 1' },
+          { package: 'com.example.app2', name: 'App Demo 2' },
+          { package: 'com.example.app3', name: 'App Demo 3' },
+          { package: 'com.example.app4', name: 'App Demo 4' },
+          { package: 'com.example.app5', name: 'App Demo 5' },
+          { package: 'com.example.app6', name: 'App Demo 6' },
+          { package: 'com.example.app7', name: 'App Demo 7' },
+          { package: 'com.example.app8', name: 'App Demo 8' }
+        ];
+        renderLists(allPackages);
       }
-    } else {
-      // Modo demo con apps de ejemplo
-      status.textContent = 'Conectado (modo demo)';
-      allPackages = [
-        { package: 'com.example.app1', name: 'App Demo 1' },
-        { package: 'com.example.app2', name: 'App Demo 2' },
-        { package: 'com.example.app3', name: 'App Demo 3' },
-        { package: 'com.example.app4', name: 'App Demo 4' },
-        { package: 'com.example.app5', name: 'App Demo 5' },
-        { package: 'com.example.app6', name: 'App Demo 6' },
-        { package: 'com.example.app7', name: 'App Demo 7' },
-        { package: 'com.example.app8', name: 'App Demo 8' }
-      ];
-      renderLists(allPackages);
+    } catch (error) {
+      const message = error && typeof error.message === 'string' ? error.message : String(error);
+      status.textContent = `Error: ${message}`;
+      console.error('Error al conectar:', error);
+    } finally {
+      connectBtn.disabled = false;
     }
   }
 
