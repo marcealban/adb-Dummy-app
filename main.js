@@ -8,6 +8,10 @@ const WINDOW_HEIGHT = 600;
 const TEMP_APK_NAME = '__tmp_app_label.apk';
 const LABEL_CACHE_KEY = '__appLabels';
 
+const labelQueue = [];
+const queuedLabelPackages = new Set();
+let isProcessingLabelQueue = false;
+
 const base = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
 const adb = process.platform === 'win32' ? `"${path.join(base, 'adb.exe')}"` : 'adb';
 let cachedAapt2Command = null;
@@ -129,6 +133,67 @@ function rememberAppLabel(pkg, label) {
   writePrefs(prefs);
 }
 
+function emitToRenderer(channel, payload) {
+  if (!channel) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send(channel, payload);
+}
+
+function queueAppLabels(packages = []) {
+  const cache = getAppLabelCache();
+  packages.forEach(pkg => {
+    const normalized = typeof pkg === 'string' ? pkg.trim() : '';
+    if (!normalized) return;
+    if (cache[normalized]) return;
+    if (queuedLabelPackages.has(normalized)) return;
+    queuedLabelPackages.add(normalized);
+    labelQueue.push(normalized);
+  });
+  void processLabelQueue();
+}
+
+async function processLabelQueue() {
+  if (isProcessingLabelQueue) return;
+  isProcessingLabelQueue = true;
+  try {
+    while (labelQueue.length) {
+      const pkg = labelQueue.shift();
+      queuedLabelPackages.delete(pkg);
+      if (!pkg) continue;
+      if (getAppLabelCache()[pkg]) {
+        emitToRenderer('package-label-updated', {
+          package: pkg,
+          name: getAppLabelCache()[pkg],
+          success: true
+        });
+        continue;
+      }
+
+      emitToRenderer('package-label-started', pkg);
+
+      let label = null;
+      try {
+        label = await extractLabelForPackage(pkg);
+        if (label) {
+          rememberAppLabel(pkg, label);
+        }
+      } catch (error) {
+        console.warn(`No se pudo extraer la etiqueta para ${pkg}:`, error.message);
+      }
+
+      const cache = getAppLabelCache();
+      const finalLabel = label || cache[pkg] || pkg;
+      emitToRenderer('package-label-updated', {
+        package: pkg,
+        name: finalLabel,
+        success: Boolean(label || cache[pkg])
+      });
+    }
+  } finally {
+    isProcessingLabelQueue = false;
+  }
+}
+
 function parseLabelFromDump(output) {
   if (!output) return null;
   const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -216,16 +281,6 @@ async function extractLabelForPackage(pkg) {
   }
 }
 
-async function resolveLabel(pkg) {
-  const cache = getAppLabelCache();
-  if (cache[pkg]) return cache[pkg];
-  const label = await extractLabelForPackage(pkg);
-  if (label) {
-    rememberAppLabel(pkg, label);
-  }
-  return label || null;
-}
-
 async function listLaunchablePackages() {
   if (!currentDevice) {
     throw new Error('No hay un dispositivo conectado.');
@@ -249,14 +304,23 @@ async function listLaunchablePackages() {
       }
     });
 
-  const result = [];
-  for (const pkg of packages) {
-    const label = await resolveLabel(pkg);
-    result.push({
+  const cache = getAppLabelCache();
+  const missing = [];
+  const result = packages.map(pkg => {
+    const cachedLabel = cache[pkg];
+    if (!cachedLabel) {
+      missing.push(pkg);
+    }
+    return {
       package: pkg,
-      name: label || pkg,
-      hasLabel: Boolean(label)
-    });
+      name: cachedLabel || pkg,
+      hasLabel: Boolean(cachedLabel),
+      labelResolved: Boolean(cachedLabel)
+    };
+  });
+
+  if (missing.length) {
+    queueAppLabels(missing);
   }
 
   return result;
