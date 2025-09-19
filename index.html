@@ -612,6 +612,13 @@ window.addEventListener('DOMContentLoaded', () => {
     nameSpan.textContent = displayName;
     content.appendChild(nameSpan);
 
+    if (!app.labelResolved) {
+      const spinner = document.createElement('div');
+      spinner.className = 'loading-spinner';
+      spinner.setAttribute('data-role', 'label-spinner');
+      content.appendChild(spinner);
+    }
+
     content.addEventListener('click', async (event) => {
       if (suppressNextClick) {
         event.preventDefault();
@@ -622,6 +629,19 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     return li;
+  }
+
+  function ensureLabelSpinner(listElement, pkg) {
+    if (!listElement || !pkg) return;
+    const match = allPackages.find(app => app.package === pkg);
+    if (match && match.labelResolved) return;
+    const item = listElement.querySelector(`li[data-package="${pkg}"] .app-item-content`);
+    if (!item) return;
+    if (item.querySelector('[data-role="label-spinner"]')) return;
+    const spinner = document.createElement('div');
+    spinner.className = 'loading-spinner';
+    spinner.setAttribute('data-role', 'label-spinner');
+    item.appendChild(spinner);
   }
 
   // Función para lanzar app
@@ -698,6 +718,41 @@ window.addEventListener('DOMContentLoaded', () => {
 
   search.addEventListener('input', applySearchFilter);
 
+  if (typeof launcher !== 'undefined') {
+    if (typeof launcher.onPackageLabelStarted === 'function') {
+      launcher.onPackageLabelStarted(pkg => {
+        const target = typeof pkg === 'string' ? pkg.trim() : '';
+        if (!target) return;
+        ensureLabelSpinner(allList, target);
+        ensureLabelSpinner(frequentList, target);
+      });
+    }
+
+    if (typeof launcher.onPackageLabelUpdated === 'function') {
+      launcher.onPackageLabelUpdated(data => {
+        const pkg = data && typeof data.package === 'string' ? data.package.trim() : '';
+        if (!pkg) return;
+        const label = data && typeof data.name === 'string' && data.name.trim() ? data.name.trim() : pkg;
+        const success = Boolean(data && data.success);
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (app.package === pkg) {
+            found = true;
+            const hasLabel = success ? true : Boolean(app.hasLabel);
+            return { ...app, name: label, hasLabel, labelResolved: true };
+          }
+          return app;
+        });
+        if (!found) {
+          allPackages.push({ package: pkg, name: label, hasLabel: success, labelResolved: true, processing: false });
+        }
+        const previousScroll = allList.scrollTop;
+        renderLists(allPackages);
+        allList.scrollTop = previousScroll;
+      });
+    }
+  }
+
   // Función de conexión simplificada
   async function attemptConnect() {
     status.textContent = 'Conectando...';
@@ -714,7 +769,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
         if (typeof launcher.listPackages === 'function') {
           const packages = await launcher.listPackages();
-          allPackages = packages.map(app => ({ ...app, processing: false }));
+          allPackages = packages.map(app => ({
+            ...app,
+            processing: false,
+            labelResolved: typeof app.labelResolved === 'boolean' ? app.labelResolved : Boolean(app.hasLabel)
+          }));
           renderLists(allPackages);
           status.textContent = `${deviceLabel} conectado. ${packages.length} aplicaciones disponibles.`;
         } else {
