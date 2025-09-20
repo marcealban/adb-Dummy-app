@@ -18,7 +18,7 @@ const queuedIconPackages = new Set();
 let isProcessingIconQueue = false;
 
 const base = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
-const ICON_CACHE_DIR = path.join(base, 'IconCache');
+const ICON_CACHE_DIR = path.join(base, 'adb-Dummy-app_cache_iconos');
 const TEMP_ICON_BASE_DIR = path.join(base, '__tmp_icons');
 const LOG_FILE_PATH = path.join(base, 'command.log');
 const adb = process.platform === 'win32' ? `"${path.join(base, 'adb.exe')}"` : 'adb';
@@ -562,6 +562,9 @@ function rememberAppLabel(pkg, label) {
   const prefs = readPrefs();
   prefs[LABEL_CACHE_KEY] = cache;
   writePrefs(prefs);
+  if (!getCachedIconPath(pkg)) {
+    queueAppIcons([pkg]);
+  }
 }
 
 function getCachedIconPath(pkg) {
@@ -675,9 +678,11 @@ async function processLabelQueue() {
 }
 
 function queueAppIcons(packages = []) {
+  const labelCache = getAppLabelCache();
   packages.forEach(pkg => {
     const normalized = typeof pkg === 'string' ? pkg.trim() : '';
     if (!normalized) return;
+    if (!labelCache[normalized]) return;
     if (getCachedIconPath(normalized)) return;
     if (queuedIconPackages.has(normalized)) return;
     queuedIconPackages.add(normalized);
@@ -696,6 +701,11 @@ async function processIconQueue() {
         queuedIconPackages.delete(pkg);
       }
       if (!pkg) continue;
+
+      const labelCache = getAppLabelCache();
+      if (!labelCache[pkg]) {
+        continue;
+      }
 
       const cached = getCachedIconPath(pkg);
       if (cached) {
