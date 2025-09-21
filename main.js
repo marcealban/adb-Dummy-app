@@ -1005,12 +1005,12 @@ async function extractIconForPackage(pkg) {
   }
 }
 
-async function listLaunchablePackages() {
+async function listUserPackages() {
   if (!currentDevice) {
     throw new Error('No hay un dispositivo conectado.');
   }
 
-  const query = 'shell "cmd package query-activities -a android.intent.action.MAIN -c android.intent.category.LAUNCHER --brief"';
+  const query = 'shell "pm list packages --user 0 -3"';
   const output = await run(buildAdbCommand(query));
   const packages = [];
   const seen = new Set();
@@ -1113,7 +1113,7 @@ ipcMain.handle('connect', async () => {
 });
 
 ipcMain.handle('list-packages', async () => {
-  return listLaunchablePackages();
+  return listUserPackages();
 });
 
 ipcMain.handle('launch-app', async (_event, pkg) => {
