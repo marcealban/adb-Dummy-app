@@ -437,7 +437,7 @@ async function extractEntryToTemp(apkPath, entryPath, tempDir) {
 
   const extractionRoot = path.join(tempDir, '__extract');
   ensureDirectory(extractionRoot);
-  await run(`${tar} -xf "${apkPath}" "${entryPath}" -C "${extractionRoot}"`);
+  await run(`${tar} -xf "${apkPath}" -C "${extractionRoot}" "${entryPath}"`);
   return path.join(extractionRoot, entryPath);
 }
 
