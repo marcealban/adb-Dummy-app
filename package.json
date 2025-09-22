@@ -5,6 +5,9 @@
   "main": "main.js",
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "sharp": "^0.33.2"
+  },
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win portable"
