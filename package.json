@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start": "electron .",
+    "prebuild": "node scripts/ensure-sharp.js",
     "build": "electron-builder --win portable"
   },
   "devDependencies": {
