@@ -721,7 +721,7 @@ window.addEventListener('DOMContentLoaded', () => {
     nameSpan.textContent = displayName;
     content.appendChild(nameSpan);
 
-    if (!app.labelResolved) {
+    if (app.labelLoading && !app.labelResolved) {
       const spinner = document.createElement('div');
       spinner.className = 'loading-spinner';
       spinner.setAttribute('data-role', 'label-spinner');
@@ -738,19 +738,6 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     return li;
-  }
-
-  function ensureLabelSpinner(listElement, pkg) {
-    if (!listElement || !pkg) return;
-    const match = allPackages.find(app => app.package === pkg);
-    if (match && match.labelResolved) return;
-    const item = listElement.querySelector(`li[data-package="${pkg}"] .app-item-content`);
-    if (!item) return;
-    if (item.querySelector('[data-role="label-spinner"]')) return;
-    const spinner = document.createElement('div');
-    spinner.className = 'loading-spinner';
-    spinner.setAttribute('data-role', 'label-spinner');
-    item.appendChild(spinner);
   }
 
   // Función para lanzar app
@@ -832,8 +819,40 @@ window.addEventListener('DOMContentLoaded', () => {
       launcher.onPackageLabelStarted(pkg => {
         const target = typeof pkg === 'string' ? pkg.trim() : '';
         if (!target) return;
-        ensureLabelSpinner(allList, target);
-        ensureLabelSpinner(frequentList, target);
+
+        let needsRerender = false;
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (app.package === target) {
+            found = true;
+            if (!app.labelLoading) {
+              needsRerender = true;
+            }
+            return { ...app, labelLoading: true };
+          }
+          return app;
+        });
+
+        if (!found) {
+          allPackages.push({
+            package: target,
+            name: target,
+            hasLabel: false,
+            labelResolved: false,
+            labelLoading: true,
+            processing: false,
+            iconPath: '',
+            iconResolved: false,
+            iconLoading: false
+          });
+          needsRerender = true;
+        }
+
+        if (needsRerender) {
+          const previousScroll = allList.scrollTop;
+          renderLists(allPackages);
+          allList.scrollTop = previousScroll;
+        }
       });
     }
 
@@ -848,12 +867,23 @@ window.addEventListener('DOMContentLoaded', () => {
           if (app.package === pkg) {
             found = true;
             const hasLabel = success ? true : Boolean(app.hasLabel);
-            return { ...app, name: label, hasLabel, labelResolved: true };
+            const resolved = success ? true : Boolean(app.labelResolved);
+            return { ...app, name: label, hasLabel, labelResolved: resolved, labelLoading: false };
           }
           return app;
         });
         if (!found) {
-          allPackages.push({ package: pkg, name: label, hasLabel: success, labelResolved: true, processing: false, iconPath: '', iconResolved: false, iconLoading: false });
+          allPackages.push({
+            package: pkg,
+            name: label,
+            hasLabel: success,
+            labelResolved: success,
+            labelLoading: false,
+            processing: false,
+            iconPath: '',
+            iconResolved: false,
+            iconLoading: false
+          });
         }
         const previousScroll = allList.scrollTop;
         renderLists(allPackages);
@@ -909,6 +939,7 @@ window.addEventListener('DOMContentLoaded', () => {
             name: pkg,
             hasLabel: false,
             labelResolved: false,
+            labelLoading: false,
             processing: false,
             iconPath: success && iconPath ? iconPath : '',
             iconResolved: success && Boolean(iconPath),
@@ -942,6 +973,7 @@ window.addEventListener('DOMContentLoaded', () => {
             ...app,
             processing: false,
             labelResolved: typeof app.labelResolved === 'boolean' ? app.labelResolved : Boolean(app.hasLabel),
+            labelLoading: false,
             iconPath: typeof app.iconPath === 'string' ? app.iconPath : '',
             iconResolved: typeof app.iconResolved === 'boolean' ? app.iconResolved : Boolean(app.iconPath),
             iconLoading: false
@@ -954,14 +986,14 @@ window.addEventListener('DOMContentLoaded', () => {
       } else {
         status.textContent = 'Conectado (modo demo)';
         allPackages = [
-          { package: 'com.example.app1', name: 'App Demo 1', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app2', name: 'App Demo 2', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app3', name: 'App Demo 3', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app4', name: 'App Demo 4', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app5', name: 'App Demo 5', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app6', name: 'App Demo 6', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app7', name: 'App Demo 7', iconPath: '', iconResolved: false, iconLoading: false },
-          { package: 'com.example.app8', name: 'App Demo 8', iconPath: '', iconResolved: false, iconLoading: false }
+          { package: 'com.example.app1', name: 'App Demo 1', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app2', name: 'App Demo 2', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app3', name: 'App Demo 3', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app4', name: 'App Demo 4', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app5', name: 'App Demo 5', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app6', name: 'App Demo 6', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app7', name: 'App Demo 7', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false },
+          { package: 'com.example.app8', name: 'App Demo 8', iconPath: '', iconResolved: false, iconLoading: false, labelLoading: false }
         ];
         renderLists(allPackages);
       }
