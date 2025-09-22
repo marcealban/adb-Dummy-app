@@ -3,6 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const { exec, spawn } = require('child_process');
 const { pathToFileURL } = require('url');
+let sharp = null;
+try {
+  // sharp is optional during development but required for adaptive icon composition
+  // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+  sharp = require('sharp');
+} catch (error) {
+  console.warn('La librería sharp no está disponible:', error.message);
+}
 
 const WINDOW_WIDTH = 416;
 const WINDOW_HEIGHT = 600;
@@ -19,11 +27,17 @@ let isProcessingIconQueue = false;
 
 const base = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
 const ICON_CACHE_DIR = path.join(base, 'adb-Dummy-app_cache_iconos');
-const TEMP_ICON_BASE_DIR = path.join(base, '__tmp_icons');
+const TEMP_ICON_PREFIX = 'icono_';
 const LOG_FILE_PATH = path.join(base, 'command.log');
 const adb = process.platform === 'win32' ? `"${path.join(base, 'adb.exe')}"` : 'adb';
 let cachedAapt2Command = null;
 let cachedTarCommand = null;
+
+const ANDROID_COLOR_MAP = {
+  transparent: '#00000000',
+  black: '#ff000000',
+  white: '#ffffffff'
+};
 
 let mainWindow = null;
 let currentDevice = '';
@@ -228,6 +242,10 @@ function parseResourceValue(rawValue) {
     return { raw: value };
   }
 
+  if (isColorValue(value)) {
+    return { raw: value, color: normalizeHexColor(value) };
+  }
+
   return { raw: value, path: value };
 }
 
@@ -280,7 +298,7 @@ async function downloadRemoteApks(targetPaths, tempDir, existingEntries = []) {
     }
 
     const localPath = path.join(tempDir, fileName);
-    await run(buildAdbCommand(`pull "${normalizedRemote}" "${localPath}"`));
+    await run(buildAdbCommand(`pull "${normalizedRemote}" "${localPath}"`), { cwd: tempDir });
     entries.push({ remotePath: normalizedRemote, localPath, fileName });
     seenRemotes.add(normalizedRemote);
     usedNames.add(fileName);
@@ -302,10 +320,10 @@ async function pullPackageApks(pkg, remotePaths, options = {}) {
     return null;
   }
 
-  ensureDirectory(TEMP_ICON_BASE_DIR);
   const safeName = sanitized.replace(/[^\w\.\-]+/g, '_');
   const reuseTempDir = Boolean(options.reuseTempDir);
-  const tempDir = options.tempDir || path.join(TEMP_ICON_BASE_DIR, safeName);
+  const tempDirName = `${TEMP_ICON_PREFIX}${safeName}`;
+  const tempDir = options.tempDir || path.join(base, tempDirName);
 
   if (!reuseTempDir) {
     try {
@@ -370,7 +388,7 @@ async function resolveIconFromApks(pkg, apks, baseApk, tempDir, options = {}) {
   const rasterOnly = Boolean(options.rasterOnly);
   let badgingOutput = '';
   try {
-    badgingOutput = await run(`${aapt2} dump badging "${baseApk}"`);
+    badgingOutput = await run(`${aapt2} dump badging "${baseApk}"`, { cwd: tempDir });
   } catch (error) {
     if (rasterOnly) {
       return null;
@@ -439,7 +457,7 @@ async function resolveIconFromApks(pkg, apks, baseApk, tempDir, options = {}) {
   let adaptiveXmlPath = adaptiveExtracted;
   if (resolvedIcon.format === 'xml.flat') {
     adaptiveXmlPath = path.join(tempDir, 'adaptive_icon.xml');
-    await run(`${aapt2} convert --output-format xml --output "${adaptiveXmlPath}" "${adaptiveExtracted}"`);
+    await run(`${aapt2} convert --output-format xml --output "${adaptiveXmlPath}" "${adaptiveExtracted}"`, { cwd: tempDir });
   }
 
   let adaptiveContent = '';
@@ -452,48 +470,65 @@ async function resolveIconFromApks(pkg, apks, baseApk, tempDir, options = {}) {
   if (adaptiveContent.includes('<vector')) {
     const svgDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.svg`);
     await clearCachedIconFiles(sanitized, svgDestination);
-    await convertVectorDrawableToSvg(adaptiveXmlPath, svgDestination);
+    await convertVectorDrawableToSvg(adaptiveXmlPath, svgDestination, { cwd: tempDir });
     packageIconCache.set(sanitized, svgDestination);
     return svgDestination;
   }
 
-  const foregroundRef = extractDrawableFromXml(adaptiveContent, 'foreground');
-  if (!foregroundRef) {
+  const backgroundLayer = await resolveAdaptiveLayerResource(adaptiveContent, 'background', apks, tempDir, finalBaseName);
+  const foregroundLayer = await resolveAdaptiveLayerResource(adaptiveContent, 'foreground', apks, tempDir, finalBaseName);
+
+  if (!foregroundLayer) {
     throw new Error('No se encontró el foreground del icono adaptativo');
   }
 
-  const foregroundResource = parseResourceValue(foregroundRef);
-  if (!foregroundResource) {
-    throw new Error('Referencia al foreground inválida');
+  if (sharp && (backgroundLayer || foregroundLayer)) {
+    const composedDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.png`);
+    try {
+      await clearCachedIconFiles(sanitized, composedDestination);
+      await composeAdaptiveIcon(composedDestination, backgroundLayer, foregroundLayer);
+      packageIconCache.set(sanitized, composedDestination);
+      return composedDestination;
+    } catch (error) {
+      console.warn(`No se pudo componer el icono adaptativo para ${sanitized}:`, error.message);
+    }
   }
 
-  const resolvedForeground = await resolveResourceReference(foregroundResource, apks, ['.png', '.webp', '.xml', '.xml.flat']);
-  if (!resolvedForeground) {
-    throw new Error('No se pudo resolver el foreground del icono');
-  }
-
-  if (rasterExtensions.includes(resolvedForeground.format)) {
-    const extension = resolvedForeground.format;
-    const destination = path.join(ICON_CACHE_DIR, `${finalBaseName}.${extension}`);
-    const extracted = await extractEntryToTemp(resolvedForeground.apkPath, resolvedForeground.entryPath, tempDir);
+  if (foregroundLayer.type === 'raster' && foregroundLayer.path && foregroundLayer.format) {
+    const destination = path.join(ICON_CACHE_DIR, `${finalBaseName}.${foregroundLayer.format}`);
     await clearCachedIconFiles(sanitized, destination);
-    await copyFileSafe(extracted, destination);
+    await copyFileSafe(foregroundLayer.path, destination);
     packageIconCache.set(sanitized, destination);
     return destination;
   }
 
-  const vectorExtracted = await extractEntryToTemp(resolvedForeground.apkPath, resolvedForeground.entryPath, tempDir);
-  let vectorXmlPath = vectorExtracted;
-  if (resolvedForeground.format === 'xml.flat') {
-    vectorXmlPath = path.join(tempDir, 'foreground_vector.xml');
-    await run(`${aapt2} convert --output-format xml --output "${vectorXmlPath}" "${vectorExtracted}"`);
+  if (foregroundLayer.type === 'vector' && foregroundLayer.path) {
+    const svgDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.svg`);
+    await clearCachedIconFiles(sanitized, svgDestination);
+    await copyFileSafe(foregroundLayer.path, svgDestination);
+    packageIconCache.set(sanitized, svgDestination);
+    return svgDestination;
   }
 
-  const svgDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.svg`);
-  await clearCachedIconFiles(sanitized, svgDestination);
-  await convertVectorDrawableToSvg(vectorXmlPath, svgDestination);
-  packageIconCache.set(sanitized, svgDestination);
-  return svgDestination;
+  if (foregroundLayer.type === 'color' && foregroundLayer.color && sharp) {
+    const colorDestination = path.join(ICON_CACHE_DIR, `${finalBaseName}.png`);
+    const rgba = colorStringToRgba(foregroundLayer.color);
+    if (rgba) {
+      await clearCachedIconFiles(sanitized, colorDestination);
+      await sharp({
+        create: {
+          width: 512,
+          height: 512,
+          channels: 4,
+          background: { r: rgba.r, g: rgba.g, b: rgba.b, alpha: rgba.a / 255 }
+        }
+      }).png().toFile(colorDestination);
+      packageIconCache.set(sanitized, colorDestination);
+      return colorDestination;
+    }
+  }
+
+  throw new Error('No se pudo materializar el foreground del icono adaptativo');
 }
 
 async function getApkEntries(apkPath) {
@@ -538,12 +573,80 @@ function getFormatFromEntry(entryPath) {
   return '';
 }
 
+const DENSITY_QUALIFIER_SCORES = {
+  xxxhdpi: 800,
+  xxhdpi: 700,
+  xhdpi: 600,
+  tvdpi: 550,
+  hdpi: 500,
+  nodpi: 480,
+  anydpi: 300,
+  mdpi: 250,
+  ldpi: 200,
+  sdpi: 180
+};
+
+function normalizePreferredExtensions(preferredExtensions) {
+  const defaults = ['.png', '.webp', '.xml', '.xml.flat', '.jpg', '.jpeg'];
+  const provided = Array.isArray(preferredExtensions) && preferredExtensions.length
+    ? preferredExtensions
+    : defaults;
+  return provided
+    .map(ext => {
+      if (!ext) return '';
+      let normalized = ext.toLowerCase();
+      if (!normalized.startsWith('.')) {
+        normalized = `.${normalized}`;
+      }
+      if (normalized === '.xmlflat') {
+        return '.xml.flat';
+      }
+      return normalized;
+    })
+    .filter(Boolean);
+}
+
+function getDensityScore(entryPath) {
+  if (!entryPath) return 0;
+  const match = entryPath.match(/^res\/[^/]+-([^/]+)\//i);
+  if (!match) {
+    return 0;
+  }
+  const qualifiers = match[1].split('-');
+  let best = 0;
+  qualifiers.forEach(rawQualifier => {
+    const qualifier = rawQualifier.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(DENSITY_QUALIFIER_SCORES, qualifier)) {
+      best = Math.max(best, DENSITY_QUALIFIER_SCORES[qualifier]);
+      return;
+    }
+    const dpiMatch = qualifier.match(/^(\d+)dpi$/);
+    if (dpiMatch) {
+      const numeric = Number.parseInt(dpiMatch[1], 10);
+      if (!Number.isNaN(numeric)) {
+        best = Math.max(best, numeric);
+      }
+    }
+  });
+  return best;
+}
+
+function formatToExtension(format) {
+  if (!format) return '';
+  if (format === 'xml.flat') {
+    return '.xml.flat';
+  }
+  return `.${format.toLowerCase()}`;
+}
+
 function findResourceEntry(entries, resource, preferredExtensions) {
   if (!Array.isArray(entries) || !entries.length || !resource) return null;
 
-  const extensions = Array.isArray(preferredExtensions) && preferredExtensions.length
-    ? preferredExtensions
-    : ['.png', '.webp', '.xml', '.xml.flat', '.jpg', '.jpeg'];
+  const extensions = normalizePreferredExtensions(preferredExtensions);
+  const extensionPriority = new Map();
+  extensions.forEach((ext, index) => {
+    extensionPriority.set(ext, extensions.length - index);
+  });
 
   if (resource.path) {
     const normalized = resource.path.replace(/^\/+/, '');
@@ -559,20 +662,51 @@ function findResourceEntry(entries, resource, preferredExtensions) {
 
   const type = resource.type;
   const name = resource.name;
-  if (type && name) {
-    const baseName = name.replace(/^@/, '');
-    const prefixes = [`res/${type}-`, `res/${type}/`];
-    for (const ext of extensions) {
-      for (const prefix of prefixes) {
-        const match = entries.find(entry => entry.startsWith(prefix) && entry.endsWith(`${baseName}${ext}`));
-        if (match) {
-          return match;
-        }
-      }
-    }
+  if (!type || !name) {
+    return null;
   }
 
-  return null;
+  const baseName = name.replace(/^@/, '');
+  const matches = [];
+
+  for (const entry of entries) {
+    if (!entry.startsWith(`res/${type}-`) && !entry.startsWith(`res/${type}/`)) {
+      continue;
+    }
+    const format = getFormatFromEntry(entry);
+    const extension = formatToExtension(format);
+    if (!extensionPriority.has(extension)) {
+      continue;
+    }
+    const fileName = path.basename(entry);
+    const expected = extension === '.xml.flat' ? `${baseName}.xml.flat` : `${baseName}${extension}`;
+    if (fileName !== expected) {
+      continue;
+    }
+    const densityScore = getDensityScore(entry);
+    matches.push({
+      entry,
+      extension,
+      densityScore,
+      priority: extensionPriority.get(extension)
+    });
+  }
+
+  if (!matches.length) {
+    return null;
+  }
+
+  matches.sort((a, b) => {
+    if (a.priority !== b.priority) {
+      return b.priority - a.priority;
+    }
+    if (a.densityScore !== b.densityScore) {
+      return b.densityScore - a.densityScore;
+    }
+    return a.entry.localeCompare(b.entry);
+  });
+
+  return matches[0].entry;
 }
 
 async function resolveResourceReference(resource, apks, preferredExtensions) {
@@ -613,7 +747,7 @@ async function extractEntryToTemp(apkPath, entryPath, tempDir) {
 
   const extractionRoot = path.join(tempDir, '__extract');
   ensureDirectory(extractionRoot);
-  await run(`${tar} -xf "${apkPath}" -C "${extractionRoot}" "${entryPath}"`);
+  await run(`${tar} -xf "${apkPath}" -C "${extractionRoot}" "${entryPath}"`, { cwd: tempDir });
   return path.join(extractionRoot, entryPath);
 }
 
@@ -630,17 +764,222 @@ function extractDrawableFromXml(xmlContent, tagName) {
   const combined = xmlContent.match(selfClosingPattern) || xmlContent.match(blockPattern);
   if (!combined) return null;
   const segment = combined[0];
-  const attrMatch = segment.match(/android:(?:drawable|src)="([^"]+)"/i)
-    || segment.match(/android:(?:drawable|src)='([^']+)'/i);
+  const attrMatch = segment.match(/android:(?:drawable|src|color)="([^"]+)"/i)
+    || segment.match(/android:(?:drawable|src|color)='([^']+)'/i);
   if (attrMatch) {
     return attrMatch[1];
   }
   return null;
 }
 
-async function convertVectorDrawableToSvg(vectorXmlPath, destinationPath) {
+function isColorValue(value) {
+  if (!value) return false;
+  const trimmed = value.trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(trimmed);
+}
+
+function normalizeHexColor(value) {
+  if (!isColorValue(value)) return null;
+  const trimmed = value.trim().slice(1).toLowerCase();
+  if (trimmed.length === 3) {
+    return `#${trimmed.split('').map(ch => `${ch}${ch}`).join('')}`;
+  }
+  if (trimmed.length === 4) {
+    const expanded = trimmed.split('').map(ch => `${ch}${ch}`).join('');
+    return `#${expanded}`;
+  }
+  return `#${trimmed}`;
+}
+
+function colorStringToRgba(color) {
+  if (!color) return null;
+  const normalized = normalizeHexColor(color);
+  if (!normalized) return null;
+  const hex = normalized.slice(1);
+  let alpha = 255;
+  let offset = 0;
+  if (hex.length === 8) {
+    alpha = Number.parseInt(hex.slice(0, 2), 16);
+    offset = 2;
+  } else if (hex.length !== 6) {
+    return null;
+  }
+  const r = Number.parseInt(hex.slice(offset, offset + 2), 16);
+  const g = Number.parseInt(hex.slice(offset + 2, offset + 4), 16);
+  const b = Number.parseInt(hex.slice(offset + 4, offset + 6), 16);
+  return { r, g, b, a: alpha };
+}
+
+async function materializeResolvedResource(resolved, apks, tempDir, options = {}) {
+  if (!resolved) return null;
+  const { apkPath, entryPath, format } = resolved;
+  if (!apkPath || !entryPath || !format) {
+    return null;
+  }
+
+  const suffix = options.suffix || 'layer';
+
+  if (['png', 'webp', 'jpg', 'jpeg'].includes(format)) {
+    const extracted = await extractEntryToTemp(apkPath, entryPath, tempDir);
+    return { type: 'raster', path: extracted, format };
+  }
+
+  let xmlPath = await extractEntryToTemp(apkPath, entryPath, tempDir);
+  if (format === 'xml.flat') {
+    const aapt2 = getAapt2Command();
+    if (!aapt2) {
+      return null;
+    }
+    const convertedPath = path.join(tempDir, `${suffix}.xml`);
+    await run(`${aapt2} convert --output-format xml --output "${convertedPath}" "${xmlPath}"`, { cwd: tempDir });
+    xmlPath = convertedPath;
+  }
+
+  let xmlContent = '';
+  try {
+    xmlContent = await fs.promises.readFile(xmlPath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  if (/<vector[\s>]/i.test(xmlContent)) {
+    const svgPath = path.join(tempDir, `${suffix}.svg`);
+    await convertVectorDrawableToSvg(xmlPath, svgPath, { cwd: tempDir });
+    return { type: 'vector', path: svgPath, format: 'svg' };
+  }
+
+  const nestedTags = ['bitmap', 'item', 'inset'];
+  for (const tag of nestedTags) {
+    const nestedRef = extractDrawableFromXml(xmlContent, tag);
+    if (nestedRef) {
+      const nestedResource = parseResourceValue(nestedRef);
+      if (nestedResource) {
+        const nested = await resolveResourceReference(nestedResource, apks, ['.png', '.webp', '.jpg', '.jpeg', '.xml', '.xml.flat']);
+        if (nested) {
+          return materializeResolvedResource(nested, apks, tempDir, { suffix: `${suffix}_${tag}` });
+        }
+      }
+    }
+  }
+
+  const colorAttrMatch = xmlContent.match(/android:(?:color|value)="([^"]+)"/i)
+    || xmlContent.match(/android:(?:color|value)='([^']+)'/i);
+  if (colorAttrMatch && isColorValue(colorAttrMatch[1])) {
+    return { type: 'color', color: normalizeHexColor(colorAttrMatch[1]), format: 'color' };
+  }
+
+  const colorNodeMatch = xmlContent.match(/<color[^>]*>([^<]+)<\/color>/i);
+  if (colorNodeMatch && isColorValue(colorNodeMatch[1])) {
+    return { type: 'color', color: normalizeHexColor(colorNodeMatch[1]), format: 'color' };
+  }
+
+  return null;
+}
+
+async function resolveAdaptiveLayerResource(adaptiveContent, layerTag, apks, tempDir, baseName) {
+  if (!adaptiveContent || !layerTag) return null;
+  const drawableRef = extractDrawableFromXml(adaptiveContent, layerTag);
+  if (!drawableRef) {
+    return null;
+  }
+  const resource = parseResourceValue(drawableRef);
+  if (!resource) {
+    return null;
+  }
+  if (resource.color) {
+    return { type: 'color', color: resource.color, format: 'color' };
+  }
+  if (resource.android && resource.type === 'color' && resource.name) {
+    const mappedColor = ANDROID_COLOR_MAP[resource.name.toLowerCase()];
+    if (mappedColor) {
+      return { type: 'color', color: normalizeHexColor(mappedColor), format: 'color' };
+    }
+  }
+  const resolved = await resolveResourceReference(resource, apks, ['.png', '.webp', '.jpg', '.jpeg', '.xml', '.xml.flat']);
+  if (!resolved) {
+    return null;
+  }
+  const suffix = `${baseName}_${layerTag}`;
+  const materialized = await materializeResolvedResource(resolved, apks, tempDir, { suffix });
+  if (!materialized) {
+    return null;
+  }
+  return { ...materialized, resource, resolved };
+}
+
+async function composeAdaptiveIcon(destination, backgroundLayer, foregroundLayer) {
+  if (!sharp) {
+    throw new Error('sharp no está disponible');
+  }
+
+  const size = 512;
+  let base = null;
+
+  if (backgroundLayer) {
+    if (backgroundLayer.type === 'color') {
+      const rgba = colorStringToRgba(backgroundLayer.color);
+      const background = rgba
+        ? { r: rgba.r, g: rgba.g, b: rgba.b, alpha: rgba.a / 255 }
+        : { r: 0, g: 0, b: 0, alpha: 0 };
+      base = sharp({
+        create: {
+          width: size,
+          height: size,
+          channels: 4,
+          background
+        }
+      });
+    } else if (backgroundLayer.path) {
+      base = sharp(backgroundLayer.path);
+    }
+  }
+
+  if (!base) {
+    base = sharp({
+      create: {
+        width: size,
+        height: size,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      }
+    });
+  }
+
+  const composites = [];
+  if (foregroundLayer) {
+    if (foregroundLayer.type === 'color') {
+      const rgba = colorStringToRgba(foregroundLayer.color);
+      if (rgba) {
+        const buffer = await sharp({
+          create: {
+            width: size,
+            height: size,
+            channels: 4,
+            background: { r: rgba.r, g: rgba.g, b: rgba.b, alpha: rgba.a / 255 }
+          }
+        }).png().toBuffer();
+        composites.push({ input: buffer, gravity: 'center' });
+      }
+    } else if (foregroundLayer.path) {
+      composites.push({ input: foregroundLayer.path, gravity: 'center' });
+    }
+  }
+
+  ensureDirectory(path.dirname(destination));
+  await base
+    .resize(size, size, { fit: 'cover' })
+    .ensureAlpha()
+    .composite(composites)
+    .png()
+    .toFile(destination);
+
+  return destination;
+}
+
+async function convertVectorDrawableToSvg(vectorXmlPath, destinationPath, options = {}) {
   ensureDirectory(path.dirname(destinationPath));
-  await run(`npx --yes vector-drawable-svg "${vectorXmlPath}" "${destinationPath}"`);
+  const cwd = options.cwd || path.dirname(vectorXmlPath);
+  await run(`npx --yes vector-drawable-svg "${vectorXmlPath}" "${destinationPath}"`, { cwd });
   await fs.promises.access(destinationPath, fs.constants.F_OK);
   const stats = await fs.promises.stat(destinationPath);
   if (!stats || !stats.size) {
@@ -1267,7 +1606,6 @@ ipcMain.handle('launch-app', async (_event, pkg) => {
 app.whenReady().then(() => {
   PREF_PATH = path.join(app.getPath('userData'), 'preferences.json');
   ensureDirectory(ICON_CACHE_DIR);
-  ensureDirectory(TEMP_ICON_BASE_DIR);
   createWindow();
 
   app.on('activate', () => {
