@@ -321,30 +321,39 @@ async function pullPackageApks(pkg, remotePaths, options = {}) {
     ? options.existingEntries.slice()
     : [];
 
-  const pulled = await downloadRemoteApks(paths, tempDir, existingEntries);
+  try {
+    const pulled = await downloadRemoteApks(paths, tempDir, existingEntries);
 
-  if (!pulled.length) {
-    return { tempDir, apks: pulled, baseApk: null };
-  }
-
-  pulled.sort((a, b) => {
-    const aBase = a.fileName === 'base.apk' || /base\.apk$/i.test(a.remotePath) ? 0 : 1;
-    const bBase = b.fileName === 'base.apk' || /base\.apk$/i.test(b.remotePath) ? 0 : 1;
-    if (aBase !== bBase) {
-      return aBase - bBase;
+    if (!pulled.length) {
+      return { tempDir, apks: pulled, baseApk: null };
     }
-    return a.fileName.localeCompare(b.fileName);
-  });
 
-  const baseApkEntry = pulled.find(item => item.fileName === 'base.apk')
-    || pulled.find(item => /base\.apk$/i.test(item.remotePath))
-    || pulled[0];
+    pulled.sort((a, b) => {
+      const aBase = a.fileName === 'base.apk' || /base\.apk$/i.test(a.remotePath) ? 0 : 1;
+      const bBase = b.fileName === 'base.apk' || /base\.apk$/i.test(b.remotePath) ? 0 : 1;
+      if (aBase !== bBase) {
+        return aBase - bBase;
+      }
+      return a.fileName.localeCompare(b.fileName);
+    });
 
-  return {
-    tempDir,
-    apks: pulled,
-    baseApk: baseApkEntry ? baseApkEntry.localPath : null
-  };
+    const baseApkEntry = pulled.find(item => item.fileName === 'base.apk')
+      || pulled.find(item => /base\.apk$/i.test(item.remotePath))
+      || pulled[0];
+
+    return {
+      tempDir,
+      apks: pulled,
+      baseApk: baseApkEntry ? baseApkEntry.localPath : null
+    };
+  } catch (error) {
+    try {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+    throw error;
+  }
 }
 
 async function resolveIconFromApks(pkg, apks, baseApk, tempDir, options = {}) {
@@ -1090,6 +1099,13 @@ async function extractIconForPackage(pkg) {
 
   const basePulled = await pullPackageApks(sanitized, [baseRemotePath]);
   if (!basePulled || !basePulled.apks || !basePulled.apks.length || !basePulled.baseApk) {
+    if (basePulled && basePulled.tempDir) {
+      try {
+        await fs.promises.rm(basePulled.tempDir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
     throw new Error('No se pudo descargar el APK base');
   }
 
