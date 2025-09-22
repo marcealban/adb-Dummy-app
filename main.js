@@ -27,7 +27,8 @@ let isProcessingIconQueue = false;
 
 const base = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
 const ICON_CACHE_DIR = path.join(base, 'adb-Dummy-app_cache_iconos');
-const TEMP_ICON_BASE_DIR = path.join(base, '__tmp_icons');
+// Temporary work directories mimic the manual "icono_<paquete>" workflow.
+const TEMP_ICON_DIR_PREFIX = 'icono_';
 const LOG_FILE_PATH = path.join(base, 'command.log');
 const adb = process.platform === 'win32' ? `"${path.join(base, 'adb.exe')}"` : 'adb';
 let cachedAapt2Command = null;
@@ -278,6 +279,10 @@ async function fetchPackageApkPaths(pkg) {
 }
 
 async function downloadRemoteApks(targetPaths, tempDir, existingEntries = []) {
+  if (!tempDir) {
+    throw new Error('Directorio temporal no disponible para descargar los APK.');
+  }
+
   const entries = Array.isArray(existingEntries) ? [...existingEntries] : [];
   const seenRemotes = new Set(entries.map(entry => normalizeRemotePath(entry.remotePath)));
   const usedNames = new Set(entries.map(entry => entry.fileName));
@@ -298,7 +303,8 @@ async function downloadRemoteApks(targetPaths, tempDir, existingEntries = []) {
     }
 
     const localPath = path.join(tempDir, fileName);
-    await run(buildAdbCommand(`pull "${normalizedRemote}" "${localPath}"`));
+    const pullCommand = buildAdbCommand(`pull "${normalizedRemote}" "${localPath}"`);
+    await run(pullCommand, { cwd: tempDir || base });
     entries.push({ remotePath: normalizedRemote, localPath, fileName });
     seenRemotes.add(normalizedRemote);
     usedNames.add(fileName);
@@ -320,10 +326,9 @@ async function pullPackageApks(pkg, remotePaths, options = {}) {
     return null;
   }
 
-  ensureDirectory(TEMP_ICON_BASE_DIR);
-  const safeName = sanitized.replace(/[^\w\.\-]+/g, '_');
+  const safeName = sanitized.replace(/[^\w\.\-]+/g, '_') || 'pkg';
   const reuseTempDir = Boolean(options.reuseTempDir);
-  const tempDir = options.tempDir || path.join(TEMP_ICON_BASE_DIR, safeName);
+  const tempDir = options.tempDir || path.join(base, `${TEMP_ICON_DIR_PREFIX}${safeName}`);
 
   if (!reuseTempDir) {
     try {
@@ -388,7 +393,7 @@ async function resolveIconFromApks(pkg, apks, baseApk, tempDir, options = {}) {
   const rasterOnly = Boolean(options.rasterOnly);
   let badgingOutput = '';
   try {
-    badgingOutput = await run(`${aapt2} dump badging "${baseApk}"`);
+    badgingOutput = await run(`${aapt2} dump badging "${baseApk}"`, { cwd: tempDir });
   } catch (error) {
     if (rasterOnly) {
       return null;
@@ -457,7 +462,7 @@ async function resolveIconFromApks(pkg, apks, baseApk, tempDir, options = {}) {
   let adaptiveXmlPath = adaptiveExtracted;
   if (resolvedIcon.format === 'xml.flat') {
     adaptiveXmlPath = path.join(tempDir, 'adaptive_icon.xml');
-    await run(`${aapt2} convert --output-format xml --output "${adaptiveXmlPath}" "${adaptiveExtracted}"`);
+    await run(`${aapt2} convert --output-format xml --output "${adaptiveXmlPath}" "${adaptiveExtracted}"`, { cwd: tempDir });
   }
 
   let adaptiveContent = '';
@@ -545,7 +550,7 @@ async function getApkEntries(apkPath) {
   }
 
   try {
-    const { stdout } = await runBuffered(`${tar} -tf "${apkPath}"`);
+    const { stdout } = await runBuffered(`${tar} -tf "${apkPath}"`, { cwd: path.dirname(apkPath) });
     const content = stdout.toString('utf8');
     const entries = content
       .split(/\r?\n/)
@@ -646,9 +651,13 @@ async function extractEntryToTemp(apkPath, entryPath, tempDir) {
     throw new Error('Herramienta tar no disponible');
   }
 
+  if (!tempDir) {
+    throw new Error('Directorio temporal no disponible para extraer recursos.');
+  }
+
   const extractionRoot = path.join(tempDir, '__extract');
   ensureDirectory(extractionRoot);
-  await run(`${tar} -xf "${apkPath}" -C "${extractionRoot}" "${entryPath}"`);
+  await run(`${tar} -xf "${apkPath}" -C "${extractionRoot}" "${entryPath}"`, { cwd: tempDir });
   return path.join(extractionRoot, entryPath);
 }
 
@@ -732,7 +741,7 @@ async function materializeResolvedResource(resolved, apks, tempDir, options = {}
       return null;
     }
     const convertedPath = path.join(tempDir, `${suffix}.xml`);
-    await run(`${aapt2} convert --output-format xml --output "${convertedPath}" "${xmlPath}"`);
+    await run(`${aapt2} convert --output-format xml --output "${convertedPath}" "${xmlPath}"`, { cwd: tempDir });
     xmlPath = convertedPath;
   }
 
@@ -879,7 +888,8 @@ async function composeAdaptiveIcon(destination, backgroundLayer, foregroundLayer
 
 async function convertVectorDrawableToSvg(vectorXmlPath, destinationPath) {
   ensureDirectory(path.dirname(destinationPath));
-  await run(`npx --yes vector-drawable-svg "${vectorXmlPath}" "${destinationPath}"`);
+  const workingDir = vectorXmlPath ? path.dirname(vectorXmlPath) : base;
+  await run(`npx --yes vector-drawable-svg "${vectorXmlPath}" "${destinationPath}"`, { cwd: workingDir || base });
   await fs.promises.access(destinationPath, fs.constants.F_OK);
   const stats = await fs.promises.stat(destinationPath);
   if (!stats || !stats.size) {
@@ -902,7 +912,7 @@ async function getResourceTable(apkPath) {
   }
 
   try {
-    const output = await run(`${aapt2} dump resources "${apkPath}"`);
+    const output = await run(`${aapt2} dump resources "${apkPath}"`, { cwd: path.dirname(apkPath) });
     const table = new Map();
     output.split(/\r?\n/).forEach(line => {
       const match = line.match(/resource\s+0x([0-9a-f]+)\s+([^\s:]+)\s*:/i);
@@ -1506,7 +1516,6 @@ ipcMain.handle('launch-app', async (_event, pkg) => {
 app.whenReady().then(() => {
   PREF_PATH = path.join(app.getPath('userData'), 'preferences.json');
   ensureDirectory(ICON_CACHE_DIR);
-  ensureDirectory(TEMP_ICON_BASE_DIR);
   createWindow();
 
   app.on('activate', () => {
