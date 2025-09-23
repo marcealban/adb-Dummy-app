@@ -297,22 +297,49 @@
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .app-item-content::before {
-    content: '📱';
-    font-size: 16px;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    flex-shrink: 0;
-  }
-
   .app-label {
     flex: 1;
     min-width: 0;
+  }
+
+  .app-icon-wrapper {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .app-icon-wrapper.is-placeholder {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .app-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  .app-icon-placeholder {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.75);
+  }
+
+  .app-icon-wrapper .loading-spinner {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+  }
+
+  .app-item-content .loading-spinner[data-role="label-spinner"] {
+    margin-left: auto;
   }
 
   .loading-spinner {
@@ -543,6 +570,34 @@ window.addEventListener('DOMContentLoaded', () => {
   let ascending = true;
   let frequentCollapsed = false;
 
+  function createDefaultPackage(pkg, overrides = {}) {
+    const basePackage = typeof pkg === 'string' ? pkg : '';
+    return {
+      package: basePackage,
+      name: basePackage,
+      hasLabel: false,
+      labelResolved: false,
+      labelProcessing: false,
+      hasIcon: false,
+      iconPath: '',
+      iconResolved: false,
+      iconProcessing: false,
+      ...overrides
+    };
+  }
+
+  function getIconPlaceholder(name, pkg) {
+    const source = (typeof name === 'string' && name.trim()) || (typeof pkg === 'string' && pkg.trim()) || '';
+    if (!source) return '📱';
+    const firstChar = source.charAt(0);
+    if (!firstChar) return '📱';
+    const normalized = firstChar.normalize ? firstChar.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : firstChar;
+    if (/[A-Za-z0-9]/.test(normalized)) {
+      return normalized.toUpperCase();
+    }
+    return normalized || '📱';
+  }
+
   // Event listeners básicos
   if (typeof launcher !== 'undefined') {
     if (minimizeBtn) {
@@ -607,12 +662,37 @@ window.addEventListener('DOMContentLoaded', () => {
     content.className = 'app-item-content';
     li.appendChild(content);
 
+    const iconWrapper = document.createElement('div');
+    iconWrapper.className = 'app-icon-wrapper';
+    if (app.iconPath) {
+      const iconImage = document.createElement('img');
+      iconImage.className = 'app-icon';
+      iconImage.src = app.iconPath;
+      iconImage.alt = '';
+      iconWrapper.appendChild(iconImage);
+    } else {
+      iconWrapper.classList.add('is-placeholder');
+      const placeholder = document.createElement('div');
+      placeholder.className = 'app-icon-placeholder';
+      placeholder.textContent = getIconPlaceholder(displayName, pkg);
+      iconWrapper.appendChild(placeholder);
+    }
+
+    if (app.iconProcessing) {
+      const iconSpinner = document.createElement('div');
+      iconSpinner.className = 'loading-spinner';
+      iconSpinner.setAttribute('data-role', 'icon-spinner');
+      iconWrapper.appendChild(iconSpinner);
+    }
+
+    content.appendChild(iconWrapper);
+
     const nameSpan = document.createElement('span');
     nameSpan.className = 'app-label';
     nameSpan.textContent = displayName;
     content.appendChild(nameSpan);
 
-    if (!app.labelResolved) {
+    if (app.labelProcessing) {
       const spinner = document.createElement('div');
       spinner.className = 'loading-spinner';
       spinner.setAttribute('data-role', 'label-spinner');
@@ -631,19 +711,6 @@ window.addEventListener('DOMContentLoaded', () => {
     return li;
   }
 
-  function ensureLabelSpinner(listElement, pkg) {
-    if (!listElement || !pkg) return;
-    const match = allPackages.find(app => app.package === pkg);
-    if (match && match.labelResolved) return;
-    const item = listElement.querySelector(`li[data-package="${pkg}"] .app-item-content`);
-    if (!item) return;
-    if (item.querySelector('[data-role="label-spinner"]')) return;
-    const spinner = document.createElement('div');
-    spinner.className = 'loading-spinner';
-    spinner.setAttribute('data-role', 'label-spinner');
-    item.appendChild(spinner);
-  }
-
   // Función para lanzar app
   async function launchApp(packageName, displayName) {
     console.log('Launching app:', packageName);
@@ -651,7 +718,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const counts = loadCounts();
     counts[packageName] = (counts[packageName] || 0) + 1;
     saveCounts(counts);
-    renderLists(allPackages);
+    rerenderPreservingScroll();
 
     const label = displayName || packageName;
 
@@ -700,6 +767,18 @@ window.addEventListener('DOMContentLoaded', () => {
     applySearchFilter();
   }
 
+  function rerenderPreservingScroll() {
+    const previousAllScroll = allList ? allList.scrollTop : 0;
+    const previousFrequentScroll = frequentList ? frequentList.scrollTop : 0;
+    renderLists(allPackages);
+    if (allList) {
+      allList.scrollTop = previousAllScroll;
+    }
+    if (frequentList) {
+      frequentList.scrollTop = previousFrequentScroll;
+    }
+  }
+
   function applySearchFilter() {
     const term = (search.value || '').trim().toLowerCase();
     const items = allList.querySelectorAll('li');
@@ -723,8 +802,18 @@ window.addEventListener('DOMContentLoaded', () => {
       launcher.onPackageLabelStarted(pkg => {
         const target = typeof pkg === 'string' ? pkg.trim() : '';
         if (!target) return;
-        ensureLabelSpinner(allList, target);
-        ensureLabelSpinner(frequentList, target);
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (app.package === target) {
+            found = true;
+            return { ...app, labelProcessing: true };
+          }
+          return app;
+        });
+        if (!found) {
+          allPackages.push(createDefaultPackage(target, { labelProcessing: true }));
+        }
+        rerenderPreservingScroll();
       });
     }
 
@@ -739,16 +828,76 @@ window.addEventListener('DOMContentLoaded', () => {
           if (app.package === pkg) {
             found = true;
             const hasLabel = success ? true : Boolean(app.hasLabel);
-            return { ...app, name: label, hasLabel, labelResolved: true };
+            return { ...app, name: label, hasLabel, labelResolved: true, labelProcessing: false };
           }
           return app;
         });
         if (!found) {
-          allPackages.push({ package: pkg, name: label, hasLabel: success, labelResolved: true, processing: false });
+          allPackages.push(createDefaultPackage(pkg, {
+            name: label,
+            hasLabel: success,
+            labelResolved: true,
+            labelProcessing: false
+          }));
         }
-        const previousScroll = allList.scrollTop;
-        renderLists(allPackages);
-        allList.scrollTop = previousScroll;
+        rerenderPreservingScroll();
+      });
+    }
+
+    if (typeof launcher.onPackageIconStarted === 'function') {
+      launcher.onPackageIconStarted(pkg => {
+        const target = typeof pkg === 'string' ? pkg.trim() : '';
+        if (!target) return;
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (app.package === target) {
+            found = true;
+            return { ...app, iconProcessing: true };
+          }
+          if (app.iconProcessing) {
+            return { ...app, iconProcessing: false };
+          }
+          return app;
+        });
+        if (!found) {
+          allPackages.push(createDefaultPackage(target, { iconProcessing: true }));
+        }
+        rerenderPreservingScroll();
+      });
+    }
+
+    if (typeof launcher.onPackageIconUpdated === 'function') {
+      launcher.onPackageIconUpdated(data => {
+        const pkg = data && typeof data.package === 'string' ? data.package.trim() : '';
+        if (!pkg) return;
+        const rawIconPath = data && typeof data.iconPath === 'string' ? data.iconPath.trim() : '';
+        const success = Boolean(data && data.success && rawIconPath);
+        let found = false;
+        allPackages = allPackages.map(app => {
+          if (app.package === pkg) {
+            found = true;
+            const nextIconPath = success ? rawIconPath : app.iconPath;
+            const hasIcon = success ? true : Boolean(app.hasIcon);
+            const iconResolved = success ? true : Boolean(app.iconResolved);
+            return {
+              ...app,
+              iconPath: nextIconPath,
+              hasIcon,
+              iconResolved,
+              iconProcessing: false
+            };
+          }
+          return app;
+        });
+        if (!found) {
+          allPackages.push(createDefaultPackage(pkg, {
+            iconPath: success ? rawIconPath : '',
+            hasIcon: success,
+            iconResolved: success,
+            iconProcessing: false
+          }));
+        }
+        rerenderPreservingScroll();
       });
     }
   }
@@ -769,11 +918,23 @@ window.addEventListener('DOMContentLoaded', () => {
 
         if (typeof launcher.listPackages === 'function') {
           const packages = await launcher.listPackages();
-          allPackages = packages.map(app => ({
-            ...app,
-            processing: false,
-            labelResolved: typeof app.labelResolved === 'boolean' ? app.labelResolved : Boolean(app.hasLabel)
-          }));
+          allPackages = packages.map(app => {
+            const normalizedIconPath = typeof app.iconPath === 'string' ? app.iconPath : '';
+            const base = createDefaultPackage(app.package);
+            return {
+              ...base,
+              ...app,
+              name: app.name || app.package,
+              hasLabel: Boolean(app.hasLabel || app.labelResolved),
+              labelResolved: typeof app.labelResolved === 'boolean' ? app.labelResolved : Boolean(app.hasLabel),
+              labelProcessing: false,
+              iconPath: normalizedIconPath,
+              hasIcon: Boolean(app.hasIcon || (normalizedIconPath && normalizedIconPath.trim()) || app.iconResolved),
+              iconResolved: typeof app.iconResolved === 'boolean' ? app.iconResolved : Boolean(app.hasIcon || (normalizedIconPath && normalizedIconPath.trim())),
+              iconProcessing: false,
+              processing: false
+            };
+          });
           renderLists(allPackages);
           status.textContent = `${deviceLabel} conectado. ${packages.length} aplicaciones disponibles.`;
         } else {

@@ -17,5 +17,17 @@ contextBridge.exposeInMainWorld('launcher', {
     const subscription = (_event, pkg) => callback(pkg);
     ipcRenderer.on('package-label-started', subscription);
     return () => ipcRenderer.removeListener('package-label-started', subscription);
+  },
+  onPackageIconStarted: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const subscription = (_event, pkg) => callback(pkg);
+    ipcRenderer.on('package-icon-started', subscription);
+    return () => ipcRenderer.removeListener('package-icon-started', subscription);
+  },
+  onPackageIconUpdated: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const subscription = (_event, payload) => callback(payload);
+    ipcRenderer.on('package-icon-updated', subscription);
+    return () => ipcRenderer.removeListener('package-icon-updated', subscription);
   }
 });
